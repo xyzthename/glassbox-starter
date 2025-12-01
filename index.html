@@ -15,15 +15,54 @@
 </head>
 <body>
     <h1>Glassbox</h1>
-    <p>The free tool that checks Solana tokens for rugs, honeypots, and insider wallets in 1 second. Launching soon.</p>
-    <p>Building live – Day 1 complete. Join the waitlist for early access.</p>
-    <form action="https://formsubmit.co/your-real-email-here@gmail.com" method="POST">
-    <input type="email" name="email" placeholder="Your email" required>
-    <input type="hidden" name="_next" value="https://glassbox-starter.vercel.app/thanks.html">
-    <input type="hidden" name="_subject" value="New Glassbox Waitlist Signup!">
-    <input type="hidden" name="_captcha" value="false">
-    <button type="submit">Get Early Access</button>
-</form>
-    <p><small>Built with ❤️ by a solo dev. Follow on X: @xyzthename</small></p>
+    <p>Paste any Solana token address → instant rug risk check (100% free, live right now)</p>
+    
+    <div style="max-width: 600px; margin: 30px auto; text-align: center;">
+        <input id="tokenInput" type="text" placeholder="e.g. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (USDC)" style="width:100%; padding:14px; font-size:16px; border-radius:8px; border:1px solid #444; background:#111; color:#fff;">
+        <button onclick="checkToken()" style="margin-top:12px; padding:14px 32px; background:#00ff88; color:#000; border:none; border-radius:8px; font-weight:bold; font-size:16px; cursor:pointer;">Check Token Now</button>
+    </div>
+
+    <div id="result" style="margin:40px auto; padding:25px; border-radius:12px; min-height:120px; font-size:19px; max-width:600px; background:#111; border:1px solid #333;"></div>
+
+    <script>
+    async function checkToken() {
+        const address = document.getElementById("tokenInput").value.trim();
+        const resultDiv = document.getElementById("result");
+        if (!address) { 
+            resultDiv.innerHTML = "<p style='color:#ff0066;'>Please paste a valid token address</p>"; 
+            return; 
+        }
+        
+        resultDiv.innerHTML = "<p>Checking on-chain data...</p>";
+        
+        try {
+            const info = await fetch("https://api.mainnet-beta.solana.com", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    jsonrpc: "2.0", id: 1,
+                    method: "getAccountInfo",
+                    params: [address, { encoding: "jsonParsed" }]
+                })
+            }).then(r => r.json());
+
+            const mintAuth = info.result?.value?.data?.parsed?.info?.mintAuthority;
+            const isRenounced = mintAuth === null || mintAuth === "null";
+
+            if (isRenounced) {
+                resultDiv.innerHTML = `<p style="color:#00ff88; font-size:28px; margin:0;">LOW RISK</p><p>Mint authority renounced — dev cannot print more tokens</p><p>This is a major anti-rug signal</p>`;
+            } else {
+                resultDiv.innerHTML = `<p style="color:#ff0066; font-size:28px; margin:0;">HIGH RISK – MINT AUTHORITY ACTIVE</p><p>Dev can still mint unlimited supply → classic rug setup</p><p>Proceed with extreme caution or avoid</p>`;
+            }
+        } catch (e) {
+            resultDiv.innerHTML = `<p style="color:#ff0066;">Invalid token or network error — double-check the address</p>`;
+        }
+    }
+    </script>
+
+    <p style="margin-top:50px; color:#888;">
+        <small>Built live in public by a broke dev who got rugged too many times<br>
+        Follow progress: @xyzthename | Join waitlist for alerts → <a href="mailto:your-email@gmail.com" style="color:#00ff88;">email me</a></small>
+    </p>
 </body>
 </html>
