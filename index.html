@@ -205,4 +205,359 @@
     }
     .result-small {
       margin-top: 8px;
-      font-size: 0
+      font-size: 0.78rem;
+      color: #686a86;
+    }
+    .result-section-wrap {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .result-section {
+      padding: 10px 10px 8px;
+      border-radius: 12px;
+      background: rgba(10, 10, 20, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.03);
+    }
+    .result-section h3 {
+      margin: 0 0 4px;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+    .result-section p {
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--text-main);
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      margin-top: 4px;
+    }
+    .badge.green {
+      background: rgba(0, 255, 154, 0.12);
+      color: var(--accent);
+    }
+    .badge.red {
+      background: rgba(255, 59, 129, 0.12);
+      color: var(--danger);
+    }
+    .badge.gray {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+    }
+    .holder-list {
+      margin-top: 4px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .holder-list div {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .actions-row {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(5, 5, 15, 0.95);
+      color: var(--text-main);
+      font-size: 0.8rem;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn-secondary:hover {
+      border-color: var(--accent);
+    }
+    .footer {
+      margin-top: 14px;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      text-align: left;
+      opacity: 0.9;
+    }
+    .footer strong {
+      color: var(--accent);
+      font-weight: 500;
+    }
+    @media (max-width: 640px) {
+      .card {
+        padding: 24px 18px 20px;
+      }
+      .form-row {
+        flex-direction: column;
+      }
+      .form-row button {
+        width: 100%;
+      }
+      .result-section-wrap {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="card">
+      <div class="card-inner">
+        <div class="pill-row">
+          <span class="pill-dot"></span>
+          Live Solana mint authority scanner · v0.1
+        </div>
+
+        <h1>GLASSBOX</h1>
+        <p class="subtitle">
+          Check if a token’s mint authority is renounced before you ape. No wallet
+          connect, no signup, just on-chain facts.
+        </p>
+
+        <div class="form-row">
+          <input
+            id="mintInput"
+            type="text"
+            spellcheck="false"
+            placeholder="Paste a Solana token mint or token account (e.g. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)"
+          />
+          <button id="checkBtn">Check Token</button>
+        </div>
+        <div class="helper">
+          Tip: grab the <span>mint</span> from Solscan / Dexscreener / Birdeye. If
+          you paste a token account, Glassbox will hop to its mint.
+        </div>
+
+        <div id="result" class="result">
+          <div class="tag info">
+            <span class="tag-dot"></span>
+            <span>Status · Waiting for input</span>
+          </div>
+          <div class="result-title">No token checked yet.</div>
+          <div class="result-text">
+            Paste any Solana token mint above and hit “Check Token” to see whether
+            the dev can still print supply.
+          </div>
+        </div>
+
+        <div class="footer">
+          Built in public by <strong>you</strong>. This is not financial advice —
+          just raw mint authority + holder data from Solana via Helius.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const resultBox = document.getElementById("result");
+    const inputEl = document.getElementById("mintInput");
+    const btnEl = document.getElementById("checkBtn");
+
+    function showIdle() {
+      resultBox.innerHTML = `
+        <div class="tag info">
+          <span class="tag-dot"></span>
+          <span>Status · Waiting for input</span>
+        </div>
+        <div class="result-title">No token checked yet.</div>
+        <div class="result-text">
+          Paste any Solana token mint above and hit “Check Token” to see whether
+          the dev can still print supply.
+        </div>
+      `;
+    }
+
+    function showLoading() {
+      resultBox.innerHTML = `
+        <div class="tag info">
+          <span class="tag-dot"></span>
+          <span>Querying Solana…</span>
+        </div>
+        <div class="result-title">Checking mint authority on-chain.</div>
+        <div class="result-text">
+          Talking to the Glassbox node. This usually takes under a second.
+        </div>
+      `;
+    }
+
+    function showError(message) {
+      resultBox.innerHTML = `
+        <div class="tag high">
+          <span class="tag-dot"></span>
+          <span>Error</span>
+        </div>
+        <div class="result-title">Couldn’t read that mint.</div>
+        <div class="result-text">${message}</div>
+      `;
+    }
+
+    showIdle();
+
+    async function handleCheck() {
+      const mint = inputEl.value.trim();
+      if (!mint) {
+        showError("Paste a Solana token mint or token account first.");
+        return;
+      }
+
+      showLoading();
+
+      try {
+        const res = await fetch(`/api/check?mint=${encodeURIComponent(mint)}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          showError(data.message || "Unknown error from backend.");
+          return;
+        }
+
+        const {
+          mint: canonicalMint,
+          riskMint,
+          mintAuthority,
+          freezeAuthority,
+          freezeAuthorityOption,
+          holders,
+          pumpfun,
+        } = data;
+
+        const isLow = riskMint === "LOW";
+        const tagClass = isLow ? "low" : "high";
+        const title =
+          riskMint === "LOW"
+            ? "🟢 Low rug risk from mint side."
+            : "🔴 High rug risk from mint side.";
+        const line =
+          riskMint === "LOW"
+            ? "This mint has no active authority. The dev cannot print new tokens from the mint, which removes one of the biggest rug vectors."
+            : "This mint still has an active authority. The dev (or whoever controls it) can mint new tokens and nuke the chart at any time.";
+
+        const freezeText =
+          freezeAuthorityOption === 0
+            ? "No freeze authority set. Tokens cannot be globally frozen from the mint."
+            : freezeAuthority
+            ? `Freeze authority is active. Authority address: ${freezeAuthority}`
+            : "Freeze authority exists, but address could not be decoded.";
+        const freezeBadge =
+          freezeAuthorityOption === 0
+            ? '<span class="badge green">No freeze authority</span>'
+            : '<span class="badge red">Freeze authority active</span>';
+
+        let holderSummary = "Holder data not available.";
+        let holderBadge = '<span class="badge gray">Snapshot unavailable</span>';
+        let holderLines = "";
+
+        if (holders && holders.top && holders.top.length > 0) {
+          const top1 = holders.top1Percent.toFixed(2);
+          const top10 = holders.top10Percent.toFixed(2);
+          holderSummary = `Top 1 wallet holds ~${top1}% of supply. Top 10 wallets hold ~${top10}% of supply.`;
+
+          if (holders.burnInfo && holders.burnInfo.hasBurn) {
+            const bp = holders.burnInfo.burnedPercent.toFixed(2);
+            holderLines += `<div>🔥 Burn-style address holds ~${bp}% of supply.</div>`;
+          }
+
+          holderBadge =
+            top1 > 50
+              ? '<span class="badge red">Very concentrated</span>'
+              : top10 > 70
+              ? '<span class="badge red">High concentration</span>'
+              : '<span class="badge green">Reasonable distribution</span>';
+
+          const preview = holders.top.slice(0, 3);
+          preview.forEach((h) => {
+            holderLines += `<div>#${h.rank}: ${h.percent.toFixed(2)}% · ${h.address}</div>`;
+          });
+        }
+
+        const jupUrl = `https://jup.ag/swap/SOL-${canonicalMint}`;
+
+        const pumpfunLine = pumpfun
+          ? pumpfun.isPumpfun
+            ? "Token appears to originate from Pump.fun (early-stage coins are extra volatile)."
+            : pumpfun.reason || "Pump.fun origin not detected."
+          : "Pump.fun origin detection coming soon.";
+
+        resultBox.innerHTML = `
+          <div class="tag ${tagClass}">
+            <span class="tag-dot"></span>
+            <span>Mint authority ${isLow ? "renounced" : "active"}</span>
+          </div>
+          <div class="result-title">${title}</div>
+          <div class="result-text">${line}</div>
+          <div class="result-small">Mint: <code>${canonicalMint}</code></div>
+
+          <div class="result-section-wrap">
+            <div class="result-section">
+              <h3>Mint controls</h3>
+              <p>${freezeText}</p>
+              ${freezeBadge}
+              ${
+                mintAuthority
+                  ? `<div class="result-small" style="margin-top:6px;">Mint authority: <code>${mintAuthority}</code></div>`
+                  : ""
+              }
+            </div>
+            <div class="result-section">
+              <h3>Holders snapshot</h3>
+              <p>${holderSummary}</p>
+              ${holderBadge}
+              <div class="holder-list">${holderLines}</div>
+            </div>
+          </div>
+
+          <div class="result-section" style="margin-top:10px;">
+            <h3>Origin signal</h3>
+            <p>${pumpfunLine}</p>
+          </div>
+
+          <div class="actions-row">
+            <a href="${jupUrl}" target="_blank" rel="noopener noreferrer" class="btn-secondary">
+              🔁 Open in Jupiter (swap)
+            </a>
+            <button class="btn-secondary" type="button" id="copyMintBtn">
+              📋 Copy mint address
+            </button>
+          </div>
+        `;
+
+        const copyBtn = document.getElementById("copyMintBtn");
+        if (copyBtn) {
+          copyBtn.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(canonicalMint);
+              copyBtn.textContent = "✅ Mint copied";
+              setTimeout(() => {
+                copyBtn.textContent = "📋 Copy mint address";
+              }, 1500);
+            } catch {
+              alert("Could not copy mint to clipboard.");
+            }
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        showError("Network error. Try again in a few seconds.");
+      }
+    }
+
+    btnEl.addEventListener("click", handleCheck);
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleCheck();
+    });
+  </script>
+</body>
+</html>
