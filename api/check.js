@@ -3,7 +3,6 @@
 // Uses Helius RPC to fetch mint info + metadata + top holders.
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
-
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
 async function rpc(method, params) {
@@ -66,11 +65,6 @@ function parseMintAccount(base64Data) {
     hasMintAuthority,
     hasFreezeAuthority,
   };
-}
-
-function shortAddr(addr) {
-  if (!addr || addr.length <= 8) return addr;
-  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
 export default async function handler(req, res) {
@@ -145,9 +139,8 @@ export default async function handler(req, res) {
 
     const tokenMeta = { name, symbol, logoURI };
 
-    // Top holders
+    // Top holders (NOTE: this is ONLY the largest accounts, NOT full holder count)
     const largestAccounts = largest?.value || [];
-    const totalHolders = largestAccounts.length;
 
     const supplyBN = BigInt(parsedMint.supply || "0") || 1n;
 
@@ -163,8 +156,10 @@ export default async function handler(req, res) {
 
     const top10Pct = topHolders.reduce((sum, h) => sum + (h.pct || 0), 0);
 
+    // full on-chain holder count is NOT available from this RPC alone,
+    // so we leave it null instead of lying with "20".
     const holderSummary = {
-      totalHolders,
+      totalHolders: null,
       top10Pct,
       topHolders,
     };
@@ -209,7 +204,7 @@ export default async function handler(req, res) {
 
     const riskSummary = { level, blurb, score };
 
-    // Placeholder metrics; you can plug real price/liquidity later from a DEX API
+    // Placeholder metrics; with free infra we don't have these yet.
     const tokenMetrics = {
       priceUsd: null,
       liquidityUsd: null,
