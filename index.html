@@ -512,7 +512,7 @@
       border-color: var(--accent);
     }
 
-    /* Tools row (Option B) */
+    /* Tools row */
     .tools-row {
       margin-top: 6px;
       display: flex;
@@ -679,7 +679,7 @@
   </div>
 
   <script>
-    const API_BASE = "/api/check"; // Vercel serverless route
+    const API_BASE = "/api/check";
 
     const mintInput = document.getElementById("mintInput");
     const checkBtn = document.getElementById("checkBtn");
@@ -765,10 +765,8 @@
 
         const canonicalMint = mint.trim();
 
-        // JUPITER URL with your referral pubkey
         const jupUrl = `https://jup.ag/swap/SOL-${canonicalMint}?ref=3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG`;
 
-        // Risk & scam score
         const riskLevel = riskSummary?.level || "unknown";
         let riskClass = "risk-med";
         let riskLabel = "Unknown risk";
@@ -805,12 +803,13 @@
           : null;
 
         const holdersTop10 = holderSummary?.top10Pct ?? null;
+        const holdersBarWidth = holdersTop10 != null ? Math.min(100, Math.max(0, holdersTop10)) : 0;
+        const holdersTracked = holderSummary?.totalHolders ?? null;
+        const topHolders = holderSummary?.topHolders || [];
+
         const holdersLabel = holdersTop10 != null
           ? `${holdersTop10.toFixed(1)}% held by top 10 wallets`
           : "No holder data";
-        const holdersBarWidth = holdersTop10 != null ? Math.min(100, Math.max(0, holdersTop10)) : 0;
-        const holdersCount = holderSummary?.totalHolders ?? null;
-        const topHolders = holderSummary?.topHolders || [];
 
         const renouncedMint = !mintAuthority;
         const canMintMore = !!mintAuthority;
@@ -834,7 +833,9 @@
                 )
                 .join("")}
              </div>`
-          : "";
+          : `<div class="result-small" style="margin-top:4px;">
+               Holder list not available for this mint yet.
+             </div>`;
 
         resultBox.innerHTML = `
           <div class="result-header-line">
@@ -856,11 +857,7 @@
             <div style="min-width:0;">
               <div class="token-title-main">
                 <span>${name}</span>
-                ${
-                  symbol
-                    ? `<span class="token-symbol">(${symbol})</span>`
-                    : ""
-                }
+                ${symbol ? `<span class="token-symbol">(${symbol})</span>` : ""}
               </div>
               <div class="token-mint">${canonicalMint}</div>
             </div>
@@ -898,20 +895,15 @@
               <div class="metric-value">
                 ${supplyHuman != null ? formatNumber(supplyHuman) : "—"}
               </div>
-              ${
-                rawSupply != null
-                  ? `<div class="metric-sub">Raw: ${Number(rawSupply).toLocaleString()}</div>`
-                  : ""
-              }
             </div>
             <div class="metric-pill">
               <div class="metric-label">Global Fees Paid</div>
               <div class="metric-value">${formatUsd(globalFeesUsd)}</div>
             </div>
             <div class="metric-pill">
-              <div class="metric-label">Holders</div>
+              <div class="metric-label">Top holders (tracked)</div>
               <div class="metric-value">
-                ${holdersCount != null ? holdersCount.toLocaleString() : "—"}
+                ${holdersTracked != null ? holdersTracked.toLocaleString() : "—"}
               </div>
             </div>
           </div>
@@ -951,11 +943,7 @@
                     ? "badge-warn"
                     : "badge-bad"
                 }">
-                  ${
-                    holdersTop10 != null
-                      ? `${holdersTop10.toFixed(1)}%`
-                      : "Unknown"
-                  }
+                  ${holdersTop10 != null ? `${holdersTop10.toFixed(1)}%` : "Unknown"}
                 </span>
               </div>
               <div class="holders-bar">
@@ -969,9 +957,7 @@
           <div class="result-section">
             <h3>Origin signal</h3>
             <div class="origin-row">
-              <strong>${originText}</strong>${
-                originDetail ? ` · ${originDetail}` : ""
-              }
+              <strong>${originText}</strong>${originDetail ? ` · ${originDetail}` : ""}
             </div>
             <div class="result-small">
               Origin hints help you see whether this came from a known protocol (Pump, Bags, Raydium, Moonshot, etc.) or a custom deployment.
