@@ -1,146 +1,398 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Glassbox – Solana Rug Checker</title>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 40px;
-            background: #000;
-            color: #fff;
-            margin: 0;
-        }
-        h1 { font-size: 3em; }
-        input {
-            width: 100%; max-width: 600px;
-            padding: 14px;
-            font-size: 16px;
-            border-radius: 10px;
-            border: 1px solid #444;
-            background: #111;
-            color: #fff;
-            margin: 20px auto;
-        }
-        button {
-            padding: 14px 30px;
-            background:#00ff88;
-            color:#000;
-            border:none;
-            border-radius:10px;
-            font-size:18px;
-            cursor:pointer;
-        }
-        #result {
-            margin: 30px auto;
-            padding: 25px;
-            border: 1px solid #333;
-            border-radius: 10px;
-            background:#111;
-            max-width: 600px;
-            min-height: 120px;
-            font-size: 18px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glassbox – Solana Rug Checker</title>
+  <style>
+    :root {
+      --bg: #050508;
+      --card: #111119;
+      --accent: #00ff9a;
+      --accent-soft: rgba(0, 255, 154, 0.1);
+      --danger: #ff3b81;
+      --text-main: #f9f9ff;
+      --text-muted: #a0a0b8;
+      --border: #262638;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, #1a1a2e 0, #050508 55%);
+      color: var(--text-main);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+    }
+    .shell {
+      width: 100%;
+      max-width: 740px;
+      padding: 32px 20px;
+    }
+    .card {
+      background: linear-gradient(145deg, #111119, #0a0a10);
+      border-radius: 24px;
+      padding: 32px 28px 28px;
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 2.4rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .subtitle {
+      margin: 0 0 20px;
+      color: var(--text-muted);
+      font-size: 0.98rem;
+    }
+    .pill-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 18px;
+    }
+    .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(0, 255, 154, 0.9);
+    }
+    .form-row {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+    .form-row input {
+      flex: 1;
+      padding: 13px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #05050b;
+      color: var(--text-main);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+    .form-row input::placeholder {
+      color: #5f6078;
+    }
+    .form-row input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+      background: #070713;
+    }
+    .form-row button {
+      white-space: nowrap;
+      padding: 13px 18px;
+      border-radius: 12px;
+      border: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      background: var(--accent);
+      color: #02020a;
+      box-shadow: 0 10px 30px rgba(0, 255, 154, 0.25);
+      transition: transform 0.1s, box-shadow 0.1s, filter 0.1s;
+    }
+    .form-row button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.03);
+      box-shadow: 0 16px 40px rgba(0, 255, 154, 0.3);
+    }
+    .form-row button:active {
+      transform: translateY(0);
+      box-shadow: 0 6px 16px rgba(0, 255, 154, 0.2);
+    }
+    .helper {
+      margin-top: 8px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      text-align: left;
+    }
+    .helper span {
+      color: var(--accent);
+    }
+    .result {
+      margin-top: 24px;
+      padding: 18px 16px 14px;
+      border-radius: 18px;
+      background: #05050b;
+      border: 1px dashed var(--border);
+      min-height: 90px;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+    }
+    .result::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        circle at top left,
+        rgba(0, 255, 154, 0.06),
+        transparent 55%
+      );
+      pointer-events: none;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      margin-bottom: 6px;
+    }
+    .tag-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+    }
+    .tag.low {
+      background: rgba(0, 255, 154, 0.08);
+      color: var(--accent);
+    }
+    .tag.low .tag-dot {
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(0, 255, 154, 0.9);
+    }
+    .tag.high {
+      background: rgba(255, 59, 129, 0.08);
+      color: var(--danger);
+    }
+    .tag.high .tag-dot {
+      background: var(--danger);
+      box-shadow: 0 0 10px rgba(255, 59, 129, 0.9);
+    }
+    .tag.info {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-muted);
+    }
+    .tag.info .tag-dot {
+      background: #f1c40f;
+      box-shadow: 0 0 10px rgba(241, 196, 15, 0.7);
+    }
+    .result-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 1rem;
+    }
+    .result-text {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .result-small {
+      margin-top: 8px;
+      font-size: 0.78rem;
+      color: #686a86;
+    }
+    .footer {
+      margin-top: 14px;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      text-align: left;
+      opacity: 0.9;
+    }
+    .footer strong {
+      color: var(--accent);
+      font-weight: 500;
+    }
+    @media (max-width: 640px) {
+      .card {
+        padding: 24px 18px 20px;
+      }
+      .form-row {
+        flex-direction: column;
+      }
+      .form-row button {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
+  <div class="shell">
+    <div class="card">
+      <div class="pill-row">
+        <span class="pill-dot"></span>
+        Live Solana mint authority scanner · v0.1
+      </div>
 
-<h1>Glassbox</h1>
-<p>Paste any Solana token mint → see if devs can rug you.</p>
+      <h1>Glassbox</h1>
+      <p class="subtitle">
+        Check if a token’s mint authority is renounced before you ape. No wallet
+        connect, no signup, just on-chain facts.
+      </p>
 
-<input id="tokenInput" placeholder="e.g. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v">
-<button onclick="checkToken()">Check Token Now</button>
+      <div class="form-row">
+        <input
+          id="mintInput"
+          type="text"
+          placeholder="Paste a Solana token mint address (e.g. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)"
+        />
+        <button id="checkBtn">Check Token</button>
+      </div>
+      <div class="helper">
+        Tip: grab the <span>mint</span> from Solscan / Dexscreener / Birdeye, not
+        a wallet or pool address.
+      </div>
 
-<div id="result"></div>
+      <div id="result" class="result">
+        <div class="tag info">
+          <span class="tag-dot"></span>
+          <span>Status · Waiting for input</span>
+        </div>
+        <div class="result-title">No token checked yet.</div>
+        <div class="result-text">
+          Paste any Solana token mint above and hit “Check Token” to see whether
+          the dev can still print supply.
+        </div>
+      </div>
 
-<script>
-    // FIXED RPC ENDPOINT (works in browser)
-    const RPC = "https://rpc.ankr.com/solana";
+      <div class="footer">
+        Built in public by <strong>you</strong>. This is not financial advice —
+        just raw mint authority data from Solana via Helius.
+      </div>
+    </div>
+  </div>
 
-    async function rpc(method, params) {
-        const res = await fetch(RPC, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ jsonrpc:"2.0", id:1, method, params })
+  <script>
+    const resultBox = document.getElementById("result");
+    const inputEl = document.getElementById("mintInput");
+    const btnEl = document.getElementById("checkBtn");
+
+    function setResult(state) {
+      if (state.type === "idle") {
+        resultBox.innerHTML = `
+          <div class="tag info">
+            <span class="tag-dot"></span>
+            <span>Status · Waiting for input</span>
+          </div>
+          <div class="result-title">No token checked yet.</div>
+          <div class="result-text">
+            Paste any Solana token mint above and hit “Check Token” to see whether
+            the dev can still print supply.
+          </div>
+        `;
+      } else if (state.type === "loading") {
+        resultBox.innerHTML = `
+          <div class="tag info">
+            <span class="tag-dot"></span>
+            <span>Querying Solana…</span>
+          </div>
+          <div class="result-title">Checking mint authority on-chain.</div>
+          <div class="result-text">Talking to the Glassbox node. This usually takes under a second.</div>
+        `;
+      } else if (state.type === "low") {
+        resultBox.innerHTML = `
+          <div class="tag low">
+            <span class="tag-dot"></span>
+            <span>Mint authority renounced</span>
+          </div>
+          <div class="result-title">🟢 Low rug risk from mint side.</div>
+          <div class="result-text">
+            This mint has <strong>no active authority</strong>. The dev cannot print new tokens from the mint,
+            which removes one of the biggest rug vectors.
+          </div>
+          <div class="result-small">Mint: <code>${state.mint}</code></div>
+        `;
+      } else if (state.type === "high") {
+        resultBox.innerHTML = `
+          <div class="tag high">
+            <span class="tag-dot"></span>
+            <span>Mint authority active</span>
+          </div>
+          <div class="result-title">🔴 High rug risk from mint side.</div>
+          <div class="result-text">
+            This mint still has an active authority. The dev (or whoever controls it)
+            <strong>can mint new tokens</strong> and nuke the chart at any time.
+          </div>
+          <div class="result-small">
+            Mint: <code>${state.mint}</code><br/>
+            Authority: <code>${state.authority}</code>
+          </div>
+        `;
+      } else if (state.type === "error") {
+        resultBox.innerHTML = `
+          <div class="tag high">
+            <span class="tag-dot"></span>
+            <span>Error</span>
+          </div>
+          <div class="result-title">Couldn’t read that mint.</div>
+          <div class="result-text">
+            ${state.message}
+          </div>
+        `;
+      }
+    }
+
+    setResult({ type: "idle" });
+
+    async function handleCheck() {
+      const mint = inputEl.value.trim();
+      if (!mint) {
+        setResult({
+          type: "error",
+          message: "Paste a Solana token mint address first.",
         });
+        return;
+      }
+
+      setResult({ type: "loading" });
+
+      try {
+        const res = await fetch(`/api/check?mint=${encodeURIComponent(mint)}`);
         const data = await res.json();
-        return data.result;
-    }
 
-    function decodeMintAccount(base64Data) {
-        const raw = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-        return {
-            mintAuthorityOption: raw[0],
-            mintAuthority: bs58Encode(raw.slice(4, 36)),
-        };
-    }
-
-    function bs58Encode(bytes) {
-        const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-        let carry;
-        let digits = [0];
-        for (let i = 0; i < bytes.length; i++) {
-            carry = bytes[i];
-            for (let j = 0; j < digits.length; j++) {
-                carry += digits[j] * 256;
-                digits[j] = carry % 58;
-                carry = (carry / 58) | 0;
-            }
-            while (carry) {
-                digits.push(carry % 58);
-                carry = (carry / 58) | 0;
-            }
-        }
-        return digits.reverse().map(d => alphabet[d]).join("");
-    }
-
-    async function checkToken() {
-        const address = document.getElementById("tokenInput").value.trim();
-        const result = document.getElementById("result");
-
-        if (!address) {
-            result.innerHTML = "<p style='color:#ff0066;'>Enter a token mint address.</p>";
-            return;
+        if (!res.ok || !data.ok) {
+          setResult({
+            type: "error",
+            message: data.message || "Unknown error from backend.",
+          });
+          return;
         }
 
-        result.innerHTML = "<p>Checking on-chain data...</p>";
-
-        const info = await rpc("getAccountInfo", [address, { encoding: "base64" }]);
-
-        if (!info || !info.value) {
-            result.innerHTML = "<p style='color:#ff0066;'>Not a valid account on Solana.</p>";
-            return;
-        }
-
-        const [dataBase64] = info.value.data;
-
-        let mint;
-        try {
-            mint = decodeMintAccount(dataBase64);
-        } catch (e) {
-            result.innerHTML = `<p style="color:#ffaa00;">Unable to parse mint data.</p>`;
-            return;
-        }
-
-        if (mint.mintAuthorityOption === 0) {
-            result.innerHTML = `
-                <p style="color:#00ff88; font-size:28px;">🟢 LOW RISK</p>
-                <p>Mint authority renounced.</p>
-                <p>Dev CANNOT mint more tokens — anti-rug protection.</p>
-            `;
+        if (data.risk === "LOW") {
+          setResult({ type: "low", mint: data.mint });
+        } else if (data.risk === "HIGH") {
+          setResult({
+            type: "high",
+            mint: data.mint,
+            authority: data.mintAuthority || "Unknown",
+          });
         } else {
-            result.innerHTML = `
-                <p style="color:#ff0066; font-size:28px;">🔴 HIGH RISK</p>
-                <p>Mint authority ACTIVE.</p>
-                <p>Dev CAN mint unlimited tokens — classic rug setup.</p>
-                <p><small>Authority: ${mint.mintAuthority}</small></p>
-            `;
+          setResult({
+            type: "error",
+            message: "Mint exists, but mint authority could not be read.",
+          });
         }
+      } catch (err) {
+        console.error(err);
+        setResult({
+          type: "error",
+          message: "Network error. Try again in a few seconds.",
+        });
+      }
     }
-</script>
 
+    btnEl.addEventListener("click", handleCheck);
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleCheck();
+    });
+  </script>
 </body>
 </html>
