@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "dependencies": {
     "bs58": "5.0.0"
   }
