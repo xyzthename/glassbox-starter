@@ -490,6 +490,28 @@
       color: var(--text-muted);
     }
 
+    /* Holders list */
+    .holders-list {
+      margin-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .holder-chip {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      background: rgba(15, 23, 42, 0.95);
+      color: #e5e7ff;
+      text-decoration: none;
+    }
+
+    .holder-chip:hover {
+      border-color: var(--accent);
+    }
+
     /* Tools row (Option B) */
     .tools-row {
       margin-top: 6px;
@@ -643,7 +665,7 @@
               Paste a Solana token mint on the left and hit <strong>Scan</strong> to see:
               <ul style="padding-left:18px;margin:6px 0 2px;">
                 <li>Mint &amp; freeze authority status</li>
-                <li>Holder concentration risk</li>
+                <li>Holder concentration risk + top wallets</li>
                 <li>Protocol origin hints</li>
                 <li>Readable supply, price, liquidity &amp; holder count</li>
               </ul>
@@ -698,6 +720,11 @@
       if (n < 1_000_000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
       if (n < 1_000_000_000) return (n / 1_000_000).toFixed(2) + "M";
       return (n / 1_000_000_000).toFixed(2) + "B";
+    }
+
+    function shortAddr(addr) {
+      if (!addr || addr.length <= 8) return addr;
+      return addr.slice(0, 4) + "…" + addr.slice(-4);
     }
 
     function renderError(message) {
@@ -758,14 +785,12 @@
 
         let scamScore = Number(riskSummary?.score);
         if (isNaN(scamScore) || scamScore < 0 || scamScore > 100) {
-          // fallback mapping
           if (riskLevel === "low") scamScore = 85;
           else if (riskLevel === "medium") scamScore = 55;
           else if (riskLevel === "high") scamScore = 20;
           else scamScore = 50;
         }
 
-        // Token meta
         const name = tokenMeta?.name || "Unknown Token";
         const symbol = tokenMeta?.symbol || "";
         const logo = tokenMeta?.logoURI || null;
@@ -784,8 +809,8 @@
           ? `${holdersTop10.toFixed(1)}% held by top 10 wallets`
           : "No holder data";
         const holdersBarWidth = holdersTop10 != null ? Math.min(100, Math.max(0, holdersTop10)) : 0;
-
-        const holdersCount = holderSummary?.totalHolders ?? holderSummary?.total ?? null;
+        const holdersCount = holderSummary?.totalHolders ?? null;
+        const topHolders = holderSummary?.topHolders || [];
 
         const renouncedMint = !mintAuthority;
         const canMintMore = !!mintAuthority;
@@ -795,9 +820,21 @@
         const originDetail = originHint?.detail || "";
 
         const riskBlurb = riskSummary?.blurb || "";
-
         const scamScoreClamped = Math.min(100, Math.max(0, scamScore));
         const scamScoreScale = scamScoreClamped / 100;
+
+        const holdersListHtml = topHolders.length
+          ? `<div class="holders-list">
+              ${topHolders
+                .map(
+                  (h) =>
+                    `<a class="holder-chip" href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener noreferrer">
+                      ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%
+                    </a>`
+                )
+                .join("")}
+             </div>`
+          : "";
 
         resultBox.innerHTML = `
           <div class="result-header-line">
@@ -925,6 +962,7 @@
                 <div class="holders-bar-fill" style="width:${holdersBarWidth}%;"></div>
               </div>
               <div class="result-small">${holdersLabel}</div>
+              ${holdersListHtml}
             </div>
           </div>
 
