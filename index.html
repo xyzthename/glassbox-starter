@@ -9,7 +9,7 @@
         h1 {font-size:3.5em;margin-bottom:10px}
         p {font-size:1.3em}
         input {width:100%;max-width:680px;padding:18px;font-size:18px;border-radius:12px;border:1px solid #444;background:#111;color:#fff;margin:25px auto;display:block;box-sizing:border-box}
-        button {padding:18px 50px;background:#00ff88;color:#000;border:none;border-radius:12px;font-weight:bold;font-size:20px;cursor:pointer}
+        button {padding:18px 50px;background:#00ff88;color:#000;border:none;border-radius:12px;font-weight:bold;font-size:20px;cursor:pointer;transition:0.2s}
         button:hover {background:#00cc77}
         #result {margin:50px auto;padding:35px;border-radius:16px;max-width:680px;background:#111;border:2px solid #333;min-height:140px;font-size:22px}
     </style>
@@ -19,44 +19,68 @@
     <p>Paste any Solana token address → instant rug risk check (100% free)</p>
     
     <input id="tokenInput" placeholder="e.g. DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263 (BONK)" />
-    <button onclick="checkToken()">Check Token Now</button>
+    <button id="checkBtn">Check Token Now</button>
     <div id="result"></div>
 
     <script type="module">
-    // This line pulls your secret Helius key from Vercel (100% hidden from everyone)
-    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${import.meta.env.VITE_HELIUS_KEY}`;
+        import { env } from 'process'; // dummy – Vercel injects env vars automatically
 
-    async function checkToken() {
-        let address = document.getElementById("tokenInput").value.trim() || "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
-        const resultDiv = document.getElementById("result");
-        resultDiv.innerHTML = "<p style='color:#aaa;'>Scanning on-chain...</p>";
+        const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${import.meta.env.VITE_HELIUS_KEY}`;
 
-        try {
-            // First call – handle token accounts
-            let resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
-                body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
-            });
-            let data = await resp.json();
+        async function checkToken() {
+            let address = document.getElementById("tokenInput").value.trim();
+            if (!address) address = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"; // BONK
 
-            if (data.result?.value?.data?.parsed?.type === "account") {
-                address = data.result.value.data.parsed.info.mint;
+            const resultDiv = document.getElementById("result");
+            resultDiv.innerHTML = "<p style='color:#aaa;'>Scanning…</p>";
+
+            try {
+                // 1. Handle token accounts
+                let resp = await fetch(rpcUrl, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        jsonrpc: "2.0", id: 1,
+                        method: "getAccountInfo",
+                        params: [address, {encoding: "jsonParsed"}]
+                    })
+                });
+                let data = await resp.json();
+
+                if (data.result?.value?.data?.parsed?.type === "account") {
+                    address = data.result.value.data.parsed.info.mint;
+                }
+
+                // 2. Get mint info
+                resp = await fetch(rpcUrl, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        jsonrpc: "2.0", id: 1,
+                        method: "getAccountInfo",
+                        params: [address, {encoding: "jsonParsed"}]
+                    })
+                });
+                data = await resp.json();
+
+                const isRenounced = data.result.value.data.parsed.info.mintAuthorityOption === 0;
+
+                resultDiv.innerHTML = isRenounced
+                    ? `<div style="color:#00ff88;"><p style="font-size:48px;margin:10px 0;">LOW RISK</p><p style="font-size:32px;">Mint Authority RENOUNCED</p><p>Dev cannot mint more — strong anti-rug!</p></div>`
+                    : `<div style="color:#ff0066;"><p style="font-size:48px;margin:10px 0;">HIGH RISK</p><p style="font-size:32px;">MINT AUTHORITY ACTIVE</p><p>Dev can print unlimited — avoid!</p></div>`;
+
+            } catch (e) {
+                resultDiv.innerHTML = "<p style='color:#ff0066;'>Error – refresh & try again</p>";
             }
-
-            // Second call – get mint info
-            resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
-                body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
-            });
-            data = await resp.json();
-
-            const isRenounced = data.result.value.data.parsed.info.mintAuthorityOption === 0;
-
-            resultDiv.innerHTML = isRenounced 
-                ? `<div style="color:#00ff88;"><p style="font-size:48px;margin:10px 0;">LOW RISK</p><p style="font-size:32px;">Mint Authority RENOUNCED</p><p>Dev cannot mint more — strong anti-rug!</p></div>`
-                : `<div style="color:#ff0066;"><p style="font-size:48px;margin:10px 0;">HIGH RISK</p><p style="font-size:32px;">MINT AUTHORITY ACTIVE</p><p>Dev can print unlimited — avoid!</p></div>`;
-        } catch(e) {
-            resultDiv.innerHTML = "<p style='color:#ff0066;'>Error – try again</p>";
         }
-    }
+
+        // Click handler
+        document.getElementById("checkBtn").addEventListener("click", checkToken);
+
+        // Optional: press Enter in input
+        document.getElementById("tokenInput").addEventListener("keypress", e => {
+            if (e.key === "Enter") checkToken();
+        });
     </script>
 
     <p style="margin-top:100px;color:#888;font-size:15px;">
