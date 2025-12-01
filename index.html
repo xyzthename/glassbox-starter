@@ -46,14 +46,21 @@
                 })
             }).then(r => r.json());
 
-            const mintAuth = info.result?.value?.data?.parsed?.info?.mintAuthority;
-            const isRenounced = mintAuth === null || mintAuth === "null";
+            if (!info.result?.value) {
+    resultDiv.innerHTML = `<p style="color:#ff0066;">Invalid token address — not a mint account</p>`;
+    return;
+}
 
-            if (isRenounced) {
-                resultDiv.innerHTML = `<p style="color:#00ff88; font-size:28px; margin:0;">LOW RISK</p><p>Mint authority renounced — dev cannot print more tokens</p><p>This is a major anti-rug signal</p>`;
-            } else {
-                resultDiv.innerHTML = `<p style="color:#ff0066; font-size:28px; margin:0;">HIGH RISK – MINT AUTHORITY ACTIVE</p><p>Dev can still mint unlimited supply → classic rug setup</p><p>Proceed with extreme caution or avoid</p>`;
-            }
+const parsedInfo = info.result.value.data.parsed.info;
+const mintAuth = parsedInfo.mintAuthorityOption === 0 ? null : parsedInfo.mintAuthority;
+
+const isRenounced = mintAuth === null;
+
+if (isRenounced) {
+    resultDiv.innerHTML = `<p style="color:#00ff88; font-size:28px; margin:0;">🟢 LOW RISK</p><p style="color:#00ff88;">Mint authority renounced — dev cannot print more tokens</p><p>This is a major anti-rug signal. Safer to ape!</p>`;
+} else {
+    resultDiv.innerHTML = `<p style="color:#ff0066; font-size:28px; margin:0;">🔴 HIGH RISK – MINT AUTHORITY ACTIVE</p><p style="color:#ff0066;">Dev can still mint unlimited supply → classic rug setup</p><p>Proceed with extreme caution or avoid entirely</p>`;
+}
         } catch (e) {
             resultDiv.innerHTML = `<p style="color:#ff0066;">Invalid token or network error — double-check the address</p>`;
         }
