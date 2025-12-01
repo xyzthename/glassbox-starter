@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Glassbox – Instant Solana Rug Checker</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #000; color: #fff; margin: 0; }
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #000; color: #fff; margin: 0; line-height: 1.6; }
         h1 { font-size: 3.5em; margin-bottom: 10px; }
-        input { width: 100%; max-width: 600px; padding: 16px; font-size: 18px; border-radius: 12px; border: 1px solid #444; background:#111; color:#fff; margin: 20px auto; display: block; }
-        button { padding: 16px 40px; background:#00ff88; color:#000; border:none; border-radius:12px; font-weight:bold; font-size:18px; cursor:pointer; }
-        #result { margin:40px auto; padding:30px; border-radius:16px; max-width:600px; background:#111; border:2px solid #333; min-height:120px; font-size:20px; }
+        p { font-size: 1.3em; }
+        input { width: 100%; max-width: 680px; padding: 18px; font-size: 18px; border-radius: 12px; border: 1px solid #444; background:#111; color:#fff; margin: 25px auto; display: block; box-sizing: border-box; }
+        button { padding: 18px 50px; background:#00ff88; color:#000; border:none; border-radius:12px; font-weight:bold; font-size:20px; cursor:pointer; transition: all 0.2s; }
+        button:hover { background:#00cc77; }
+        #result { margin:50px auto; padding:35px; border-radius:16px; max-width:680px; background:#111; border:2px solid #333; min-height:140px; font-size:22px; }
     </style>
 </head>
 <body>
@@ -25,42 +27,45 @@
     async function checkToken() {
         let address = document.getElementById("tokenInput").value.trim();
         const resultDiv = document.getElementById("result");
-        if (!address) { resultDiv.innerHTML = "<p style='color:#ff0066;'>Paste a token address first</p>"; return; }
+        
+        if (!address) {
+            resultDiv.innerHTML = "<p style='color:#ff0066;'>Please paste a token address</p>";
+            return;
+        }
 
-        resultDiv.innerHTML = "<p>Checking Solana mainnet...</p>";
+        resultDiv.innerHTML = "<p style='color:#aaa;'>Checking Solana mainnet...</p>";
 
         try {
+            // First request — handles both mint and token accounts
             const resp = await fetch("https://api.mainnet-beta.solana.com", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "getAccountInfo",
-                    "params": [address, { "encoding": "jsonParsed" }]
+                    jsonrpc: "2.0",
+                    id: 1,
+                    method: "getAccountInfo",
+                    params: [address, { encoding: "jsonParsed" }]
                 })
             });
             const data = await resp.json();
 
-            // Case 1: User pasted a TOKEN ACCOUNT (not mint) → extract real mint
+            // If it's a token account → extract real mint
             if (data.result?.value?.data?.parsed?.type === "account") {
-                const realMint = data.result.value.data.parsed.info.mint;
-                resultDiv.innerHTML = `<p style="color:#ffaa00;">Token account detected → checking real mint: ${realMint}</p>`;
-                address = realMint;  // now check the actual mint
+                address = data.result.value.data.parsed.info.mint;
+                resultDiv.innerHTML = `<p style="color:#ffaa00;">Token account detected → checking real mint:<br><b>${address}</b></p>`;
             }
 
-            // Now fetch the mint account
+            // Second request — get mint info
             const mintResp = await fetch("https://api.mainnet-beta.solana.com", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "getAccountInfo",
-                    "params": [address, { "encoding": "jsonParsed" }]
+                    jsonrpc: "2.0",
+                    id: 1,
+                    method: "getAccountInfo",
+                    params: [address, { encoding: "jsonParsed" }]
                 })
             });
             const mintData = await mintResp.json();
 
-            if (!mintData.result?.value) {
-                resultDiv.innerHTML = `<p style="color
+            if (!mintData.result?.value)
