@@ -23,23 +23,18 @@
     <div id="result"></div>
 
     <script>
-        // This automatically grabs your hidden Helius key from Vercel
-        const rpcUrl = "https://mainnet.helius-rpc.com/?api-key=" + 
-            (window.VERCEL_ENV === "production" ? "YOUR_KEY_WILL_BE_INJECTED_AUTOMATICALLY" : "fallback");
+        // Vercel automatically replaces this exact string with your secret URL
+        const rpcUrl = "__HELIUS_RPC_URL__";
 
         async function checkToken() {
             let address = document.getElementById("tokenInput").value.trim() || "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
             const resultDiv = document.getElementById("result");
-            resultDiv.innerHTML = "<p style='color:#aaa;'>Scanning on-chain…</p>";
+            resultDiv.innerHTML = "<p style='color:#aaa;'>Scanning…</p>";
 
             try {
-                let resp = await fetch(rpcUrl, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({
-                        jsonrpc: "2.0", id: 1, method: "getAccountInfo",
-                        params: [address, {encoding: "jsonParsed"}]
-                    })
+                // First call
+                let resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
+                    body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
                 });
                 let data = await resp.json();
 
@@ -47,23 +42,20 @@
                     address = data.result.value.data.parsed.info.mint;
                 }
 
-                resp = await fetch(rpcUrl, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({
-                        jsonrpc: "2.0", id: 1, method: "getAccountInfo",
-                        params: [address, {encoding: "jsonParsed"}]
-                    })
+                // Second call
+                resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
+                    body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
                 });
                 data = await resp.json();
 
                 const isRenounced = data.result.value.data.parsed.info.mintAuthorityOption === 0;
 
                 resultDiv.innerHTML = isRenounced 
-                    ? `<div style="color:#00ff88;"><p style="font-size:48px;">LOW RISK</p><p style="font-size:32px;">Mint Authority RENOUNCED</p><p>Dev cannot mint more — strong anti-rug!</p></div>`
-                    : `<div style="color:#ff0066;"><p style="font-size:48px;">HIGH RISK</p><p style="font-size:32px;">MINT AUTHORITY ACTIVE</p><p>Dev can print unlimited — avoid!</p></div>`;
+                    ? `<div style="color:#00ff88;"><p style="font-size:48px;margin:8px 0;">LOW RISK</p><p style="font-size:32px;">Mint Authority RENOUNCED</p><p>Dev cannot mint more — safe!</p></div>`
+                    : `<div style="color:#ff0066;"><p style="font-size:48px;margin:8px 0;">HIGH RISK</p><p style="font-size:32px;">MINT AUTHORITY ACTIVE</p><p>Dev can print unlimited — rug risk!</p></div>`;
+
             } catch(e) {
-                resultDiv.innerHTML = "<p style='color:#ff0066;'>Error – refresh page</p>";
+                resultDiv.innerHTML = "<p style='color:#ff0066;'>RPC error – contact @xyzthename</p>";
             }
         }
     </script>
