@@ -634,13 +634,8 @@
                 <span>💡</span>
                 <span>We never see or store your wallet or keys.</span>
               </div>
-              <div class="preset-row">
-                <button class="preset-btn" data-mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1">
-                  USDC <span>• Safe</span>
-                </button>
-                <button class="preset-btn" data-mint="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263">
-                  BONK <span>• Meme</span>
-                </button>
+              <div class="preset-row" id="recentRow">
+                <!-- recent tokens rendered by JS -->
               </div>
             </div>
           </div>
@@ -661,7 +656,7 @@
                 <li>Protocol origin hints</li>
                 <li>Readable supply, price, liquidity &amp; holder count</li>
               </ul>
-              Then route to Jupiter, Axiom, Photon, BullX, Padre, or StalkFun in one tap.
+              Then route to Jupiter, DexScreener, Axiom, Photon, BullX, Padre, or StalkFun in one tap.
             </div>
             <div id="errorBox" class="error-box" style="display:none;"></div>
           </div>
@@ -672,6 +667,7 @@
 
   <script>
     const API_BASE = "/api/check";
+    const RECENT_KEY = "glassbox_recent_mints_v1";
 
     const mintInput = document.getElementById("mintInput");
     const checkBtn = document.getElementById("checkBtn");
@@ -679,6 +675,7 @@
     const checkBtnSpinner = document.getElementById("checkBtnSpinner");
     const resultBox = document.getElementById("resultBox");
     const errorBox = document.getElementById("errorBox");
+    const recentRow = document.getElementById("recentRow");
 
     function setLoading(isLoading) {
       if (isLoading) {
@@ -693,8 +690,9 @@
     }
 
     function formatUsd(value) {
-      if (value == null || isNaN(value)) return "—";
+      if (value === null || value === undefined) return "N/A";
       const n = Number(value);
+      if (!isFinite(n)) return "N/A";
       if (n === 0) return "$0";
       if (n < 0.0001) return "< $0.0001";
       if (n < 1) return "$" + n.toFixed(4);
@@ -703,15 +701,25 @@
       if (n < 1_000_000_000) {
         return "$" + (n / 1_000_000).toFixed(2) + "M";
       }
-      return "$" + (n / 1_000_000_000).toFixed(2) + "B";
+      if (n < 1_000_000_000_000) {
+        return "$" + (n / 1_000_000_000).toFixed(2) + "B";
+      }
+      return "$" + (n / 1_000_000_000_000).toFixed(2) + "T";
     }
 
     function formatNumber(value) {
       if (value == null || isNaN(value)) return "—";
       const n = Number(value);
-      if (n < 1_000_000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-      if (n < 1_000_000_000) return (n / 1_000_000).toFixed(2) + "M";
-      return (n / 1_000_000_000).toFixed(2) + "B";
+      if (n < 1_000_000) {
+        return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      }
+      if (n < 1_000_000_000) {
+        return (n / 1_000_000).toFixed(2) + "M";
+      }
+      if (n < 1_000_000_000_000) {
+        return (n / 1_000_000_000).toFixed(2) + "B";
+      }
+      return (n / 1_000_000_000_000).toFixed(2) + "T";
     }
 
     function shortAddr(addr) {
@@ -723,6 +731,88 @@
       errorBox.style.display = "block";
       errorBox.textContent = message || "Something went wrong while checking this mint.";
       resultBox.innerHTML = "";
+    }
+
+    function loadRecent() {
+      try {
+        const raw = localStorage.getItem(RECENT_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        return arr;
+      } catch {
+        return [];
+      }
+    }
+
+    function saveRecent(list) {
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+      } catch {
+        // ignore
+      }
+    }
+
+    function labelForRisk(level) {
+      if (level === "low") return "Safe";
+      if (level === "medium") return "Caution";
+      if (level === "high") return "Very risky";
+      return "Unknown";
+    }
+
+    function renderRecentRow() {
+      const recent = loadRecent();
+      if (!recent.length) {
+        // defaults
+        const defaults = [
+          {
+            mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1",
+            display: "USDC",
+            level: "low",
+          },
+          {
+            mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+            display: "BONK",
+            level: "medium",
+          },
+        ];
+        recentRow.innerHTML = defaults
+          .map(
+            (r) =>
+              `<button class="preset-btn" data-mint="${r.mint}">
+                 ${r.display} <span>· ${labelForRisk(r.level)}</span>
+               </button>`
+          )
+          .join("");
+      } else {
+        recentRow.innerHTML = recent
+          .map(
+            (r) =>
+              `<button class="preset-btn" data-mint="${r.mint}">
+                 ${r.display} <span>· ${labelForRisk(r.level)}</span>
+               </button>`
+          )
+          .join("");
+      }
+
+      document.querySelectorAll(".preset-btn").forEach((btn) => {
+        btn.onclick = () => {
+          const mint = btn.getAttribute("data-mint");
+          if (mint) {
+            mintInput.value = mint;
+            handleCheck();
+          }
+        };
+      });
+    }
+
+    function addRecent(entry) {
+      const current = loadRecent();
+      const filtered = current.filter((r) => r.mint !== entry.mint);
+      filtered.unshift(entry);
+      const trimmed = filtered.slice(0, 5);
+      saveRecent(trimmed);
+      renderRecentRow();
     }
 
     async function handleCheck() {
@@ -752,12 +842,14 @@
           holderSummary,
           originHint,
           riskSummary,
-          tokenMetrics
+          tokenMetrics,
         } = data;
 
         const canonicalMint = mint.trim();
 
+        // build external URLs
         const jupUrl = `https://jup.ag/swap/SOL-${canonicalMint}?ref=3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG`;
+        const dexscreenerUrl = `https://dexscreener.com/solana/${canonicalMint}`;
 
         const riskLevel = riskSummary?.level || "unknown";
         let riskClass = "risk-med";
@@ -785,23 +877,30 @@
         const symbol = tokenMeta?.symbol || "";
         const logo = tokenMeta?.logoURI || null;
 
+        // metrics
         const priceUsd = tokenMetrics?.priceUsd ?? null;
         const liquidityUsd = tokenMetrics?.liquidityUsd ?? null;
         const globalFeesUsd = tokenMetrics?.globalFeesUsd ?? null;
+
         const rawSupply = mintInfo?.supply;
         const decimals = mintInfo?.decimals ?? 0;
-        const supplyHuman = rawSupply != null
-          ? Number(rawSupply) / Math.pow(10, decimals || 0)
-          : null;
+        const supplyHuman =
+          rawSupply != null
+            ? Number(rawSupply) / Math.pow(10, decimals || 0)
+            : null;
 
         const holdersTop10 = holderSummary?.top10Pct ?? null;
-        const holdersBarWidth = holdersTop10 != null ? Math.min(100, Math.max(0, holdersTop10)) : 0;
+        const holdersBarWidth =
+          holdersTop10 != null
+            ? Math.min(100, Math.max(0, holdersTop10))
+            : 0;
         const holdersTracked = holderSummary?.totalHolders ?? null;
         const topHolders = holderSummary?.topHolders || [];
 
-        const holdersLabel = holdersTop10 != null
-          ? `${holdersTop10.toFixed(1)}% held by top 10 wallets`
-          : "No holder data";
+        const holdersLabel =
+          holdersTop10 != null
+            ? `${holdersTop10.toFixed(1)}% held by top 10 wallets`
+            : "No holder data";
 
         const renouncedMint = !mintAuthority;
         const canMintMore = !!mintAuthority;
@@ -828,6 +927,15 @@
           : `<div class="result-small" style="margin-top:4px;">
                Holder list not available for this mint yet.
              </div>`;
+
+        // Update recent tokens list
+        const displayForRecent =
+          symbol || name || shortAddr(canonicalMint) || "Token";
+        addRecent({
+          mint: canonicalMint,
+          display: displayForRecent,
+          level: riskLevel,
+        });
 
         resultBox.innerHTML = `
           <div class="result-header-line">
@@ -866,7 +974,9 @@
           <div class="scam-score-wrap">
             <div class="scam-score-header">
               <span>GlassBox scam score (0–100)</span>
-              <span class="scam-score-value">${scamScoreClamped.toFixed(0)}/100</span>
+              <span class="scam-score-value">${scamScoreClamped.toFixed(
+                0
+              )}/100</span>
             </div>
             <div class="scam-score-bar">
               <div class="scam-score-fill" style="transform:scaleX(${scamScoreScale});"></div>
@@ -885,7 +995,11 @@
             <div class="metric-pill">
               <div class="metric-label">Total Supply</div>
               <div class="metric-value">
-                ${supplyHuman != null ? formatNumber(supplyHuman) : "—"}
+                ${
+                  supplyHuman != null
+                    ? formatNumber(supplyHuman)
+                    : "—"
+                }
               </div>
             </div>
             <div class="metric-pill">
@@ -895,11 +1009,17 @@
             <div class="metric-pill">
               <div class="metric-label">Holders</div>
               <div class="metric-value">
-                ${holdersTracked != null ? holdersTracked.toLocaleString() : "—"}
+                ${
+                  holdersTracked != null
+                    ? holdersTracked.toLocaleString()
+                    : "—"
+                }
               </div>
               ${
                 holdersTop10 != null
-                  ? `<div class="metric-sub">${holdersTop10.toFixed(1)}% in top 10</div>`
+                  ? `<div class="metric-sub">${holdersTop10.toFixed(
+                      1
+                    )}% in top 10</div>`
                   : ""
               }
             </div>
@@ -954,7 +1074,9 @@
           <div class="result-section">
             <h3>Origin signal</h3>
             <div class="origin-row">
-              <strong>${originText}</strong>${originDetail ? ` · ${originDetail}` : ""}
+              <strong>${originText}</strong>${
+                originDetail ? ` · ${originDetail}` : ""
+              }
             </div>
             <div class="result-small">
               Origin hints help you see whether this came from a known protocol (Pump, Bags, Raydium, Moonshot, etc.) or a custom deployment.
@@ -964,6 +1086,9 @@
           <div class="result-section">
             <h3>Tools</h3>
             <div class="tools-row">
+              <a class="tool-btn" href="${dexscreenerUrl}" target="_blank" rel="noopener noreferrer">
+                <span>📊 DexScreener</span>
+              </a>
               <a class="tool-btn" href="https://axiom.trade/@dudexyz" target="_blank" rel="noopener noreferrer">
                 <span>📈 Axiom</span>
               </a>
@@ -1036,15 +1161,8 @@
       }
     });
 
-    document.querySelectorAll(".preset-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const mint = btn.getAttribute("data-mint");
-        if (mint) {
-          mintInput.value = mint;
-          handleCheck();
-        }
-      });
-    });
+    // initial recent row
+    renderRecentRow();
   </script>
 </body>
 </html>
