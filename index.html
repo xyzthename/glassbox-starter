@@ -22,9 +22,8 @@
     <button onclick="checkToken()">Check Token Now</button>
     <div id="result"></div>
 
-    <script>
-        // Vercel automatically replaces this exact string with your secret URL
-        const rpcUrl = "__HELIUS_RPC_URL__";
+    <script type="module">
+        const rpcUrl = import.meta.env.VITE_RPC_URL;
 
         async function checkToken() {
             let address = document.getElementById("tokenInput").value.trim() || "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
@@ -32,17 +31,13 @@
             resultDiv.innerHTML = "<p style='color:#aaa;'>Scanning…</p>";
 
             try {
-                // First call
                 let resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
                     body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
                 });
                 let data = await resp.json();
-
                 if (data.result?.value?.data?.parsed?.type === "account") {
                     address = data.result.value.data.parsed.info.mint;
                 }
-
-                // Second call
                 resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
                     body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
                 });
@@ -53,9 +48,8 @@
                 resultDiv.innerHTML = isRenounced 
                     ? `<div style="color:#00ff88;"><p style="font-size:48px;margin:8px 0;">LOW RISK</p><p style="font-size:32px;">Mint Authority RENOUNCED</p><p>Dev cannot mint more — safe!</p></div>`
                     : `<div style="color:#ff0066;"><p style="font-size:48px;margin:8px 0;">HIGH RISK</p><p style="font-size:32px;">MINT AUTHORITY ACTIVE</p><p>Dev can print unlimited — rug risk!</p></div>`;
-
             } catch(e) {
-                resultDiv.innerHTML = "<p style='color:#ff0066;'>RPC error – contact @xyzthename</p>";
+                resultDiv.innerHTML = "<p style='color:#ff0066;'>Failed – wrong key or rate limit</p>";
             }
         }
     </script>
