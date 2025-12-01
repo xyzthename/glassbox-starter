@@ -261,6 +261,33 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .token-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 8px 0 10px;
+    }
+    .token-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      object-fit: cover;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #0b0b14;
+    }
+    .token-title-main {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .token-title-symbol {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .token-stats {
+      margin-top: 4px;
+      font-size: 0.78rem;
+      color: #999bbc;
+    }
     .actions-row {
       margin-top: 14px;
       display: flex;
@@ -406,6 +433,11 @@
 
     showIdle();
 
+    function formatPercent(x) {
+      if (isNaN(x)) return "0.00";
+      return x.toFixed(2);
+    }
+
     async function handleCheck() {
       const mint = inputEl.value.trim();
       if (!mint) {
@@ -431,7 +463,9 @@
           freezeAuthority,
           freezeAuthorityOption,
           holders,
-          pumpfun,
+          metadata,
+          decimals,
+          supply,
         } = data;
 
         const isLow = riskMint === "LOW";
@@ -451,54 +485,80 @@
             : freezeAuthority
             ? `Freeze authority is active. Authority address: ${freezeAuthority}`
             : "Freeze authority exists, but address could not be decoded.";
+
         const freezeBadge =
           freezeAuthorityOption === 0
             ? '<span class="badge green">No freeze authority</span>'
             : '<span class="badge red">Freeze authority active</span>';
 
+        // Holder summary
         let holderSummary = "Holder data not available.";
         let holderBadge = '<span class="badge gray">Snapshot unavailable</span>';
         let holderLines = "";
 
         if (holders && holders.top && holders.top.length > 0) {
-          const top1 = holders.top1Percent.toFixed(2);
-          const top10 = holders.top10Percent.toFixed(2);
-          holderSummary = `Top 1 wallet holds ~${top1}% of supply. Top 10 wallets hold ~${top10}% of supply.`;
+          const top1 = holders.top1;
+          const top10 = holders.top10;
+          holderSummary = `Top 1 wallet holds ~${formatPercent(
+            top1
+          )}% of supply. Top 10 wallets hold ~${formatPercent(
+            top10
+          )}% of supply.`;
 
-          if (holders.burnInfo && holders.burnInfo.hasBurn) {
-            const bp = holders.burnInfo.burnedPercent.toFixed(2);
-            holderLines += `<div>🔥 Burn-style address holds ~${bp}% of supply.</div>`;
+          if (top1 > 50 || top10 > 70) {
+            holderBadge =
+              '<span class="badge red">Very concentrated</span>';
+          } else {
+            holderBadge =
+              '<span class="badge green">Reasonable distribution</span>';
           }
-
-          holderBadge =
-            top1 > 50
-              ? '<span class="badge red">Very concentrated</span>'
-              : top10 > 70
-              ? '<span class="badge red">High concentration</span>'
-              : '<span class="badge green">Reasonable distribution</span>';
 
           const preview = holders.top.slice(0, 3);
           preview.forEach((h) => {
-            holderLines += `<div>#${h.rank}: ${h.percent.toFixed(2)}% · ${h.address}</div>`;
+            holderLines += `<div>#${h.rank}: ${formatPercent(
+              h.percent
+            )}% · ${h.address}</div>`;
           });
         }
 
-        const jupUrl = `https://jup.ag/swap/SOL-${canonicalMint}`;
+        // Token details
+        const tokenName = metadata?.name || "Unknown token";
+        const tokenSymbol = metadata?.symbol || "";
+        const tokenImage = metadata?.image || null;
 
-        const pumpfunLine = pumpfun
-          ? pumpfun.isPumpfun
-            ? "Token appears to originate from Pump.fun (early-stage coins are extra volatile)."
-            : pumpfun.reason || "Pump.fun origin not detected."
-          : "Pump.fun origin detection coming soon.";
+        const supplyText = supply
+          ? `${supply} (raw, decimals: ${decimals ?? "?"})`
+          : "Unknown";
+
+        const jupUrl = `https://jup.ag/swap/SOL-${canonicalMint}`;
 
         resultBox.innerHTML = `
           <div class="tag ${tagClass}">
             <span class="tag-dot"></span>
             <span>Mint authority ${isLow ? "renounced" : "active"}</span>
           </div>
-          <div class="result-title">${title}</div>
+
+          <div class="token-header">
+            ${
+              tokenImage
+                ? `<img src="${tokenImage}" alt="token logo" class="token-logo" />`
+                : `<div class="token-logo"></div>`
+            }
+            <div>
+              <div class="token-title-main">${tokenName}</div>
+              <div class="token-title-symbol">${
+                tokenSymbol ? tokenSymbol : ""
+              }</div>
+            </div>
+          </div>
+
+          <div class="token-stats">
+            Mint: <code>${canonicalMint}</code><br/>
+            Total supply (raw): ${supplyText}
+          </div>
+
+          <div class="result-title" style="margin-top:10px;">${title}</div>
           <div class="result-text">${line}</div>
-          <div class="result-small">Mint: <code>${canonicalMint}</code></div>
 
           <div class="result-section-wrap">
             <div class="result-section">
@@ -521,7 +581,7 @@
 
           <div class="result-section" style="margin-top:10px;">
             <h3>Origin signal</h3>
-            <p>${pumpfunLine}</p>
+            <p>Pump.fun origin detection coming soon. For now, verify contract and socials manually.</p>
           </div>
 
           <div class="actions-row">
