@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Glassbox – Instant Solana Rug Checker</title>
+    <title>Glassbox – Solana Rug Checker</title>
 
     <style>
         body {
@@ -14,219 +14,137 @@
             color: #fff;
             margin: 0;
         }
-
-        h1 {
-            font-size: 3.5em;
-            margin-bottom: 10px;
-        }
-
-        p {
-            margin: 0.3rem 0;
-        }
-
+        h1 { font-size: 3em; }
         input {
-            width: 100%;
-            max-width: 600px;
-            padding: 16px;
-            font-size: 18px;
-            border-radius: 12px;
+            width: 100%; max-width: 600px;
+            padding: 14px;
+            font-size: 16px;
+            border-radius: 10px;
             border: 1px solid #444;
             background: #111;
             color: #fff;
             margin: 20px auto;
-            display: block;
         }
-
         button {
-            padding: 16px 40px;
-            background: #00ff88;
-            color: #000;
-            border: none;
-            border-radius: 12px;
-            font-weight: bold;
-            font-size: 18px;
-            cursor: pointer;
+            padding: 14px 30px;
+            background:#00ff88;
+            color:#000;
+            border:none;
+            border-radius:10px;
+            font-size:18px;
+            cursor:pointer;
         }
-
         #result {
-            margin: 40px auto;
-            padding: 30px;
-            border-radius: 16px;
+            margin: 30px auto;
+            padding: 25px;
+            border: 1px solid #333;
+            border-radius: 10px;
+            background:#111;
             max-width: 600px;
-            background: #111;
-            border: 2px solid #333;
             min-height: 120px;
             font-size: 18px;
-            line-height: 1.5;
         }
     </style>
 </head>
 <body>
 
-    <h1>Glassbox</h1>
-    <p>Paste any Solana token address → instant rug risk check (100% free)</p>
+<h1>Glassbox</h1>
+<p>Paste any Solana token mint → see if devs can rug you.</p>
 
-    <input id="tokenInput" type="text"
-           placeholder="e.g. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (USDC)">
-    <button onclick="checkToken()">Check Token Now</button>
+<input id="tokenInput" placeholder="e.g. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v">
+<button onclick="checkToken()">Check Token Now</button>
 
-    <div id="result"></div>
+<div id="result"></div>
 
-    <script>
-        // Public demo RPC (QuickNode docs endpoint – no key required)
-        const RPC_URL = "https://docs-demo.solana-mainnet.quiknode.pro/";
+<script>
+    const RPC = "https://api.mainnet-beta.solana.com";
 
-        async function rpcCall(method, params, id = 1) {
-            const resp = await fetch(RPC_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    jsonrpc: "2.0",
-                    id,
-                    method,
-                    params
-                })
-            });
+    async function rpc(method, params) {
+        const res = await fetch(RPC, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ jsonrpc:"2.0", id:1, method, params })
+        });
+        const data = await res.json();
+        return data.result;
+    }
 
-            if (!resp.ok) {
-                throw new Error("HTTP error " + resp.status);
+    // Decode SPL token mint from base64 → extract mintAuthorityOption + mintAuthority pubkey
+    function decodeMintAccount(base64Data) {
+        const raw = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+
+        // Mint layout offsets:
+        // https://spl.solana.com/token#token-mint
+        return {
+            mintAuthorityOption: raw[0],
+            mintAuthority: bs58Encode(raw.slice(4, 36)),
+        };
+    }
+
+    function bs58Encode(bytes) {
+        const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let carry, digits = [0];
+        for (let i = 0; i < bytes.length; i++) {
+            carry = bytes[i];
+            for (let j = 0; j < digits.length; j++) {
+                carry += digits[j] * 256;
+                digits[j] = carry % 58;
+                carry = (carry / 58) | 0;
             }
-
-            const data = await resp.json();
-            console.log("RPC", method, "→", data); // helpful for debugging in DevTools
-            if (data.error) {
-                throw new Error(data.error.message || "RPC error");
-            }
-            return data.result;
-        }
-
-        async function checkToken() {
-            const resultDiv = document.getElementById("result");
-            let address = document.getElementById("tokenInput").value.trim();
-
-            if (!address) {
-                resultDiv.innerHTML = "<p style='color:#ff0066;'>Paste a token mint or token account first.</p>";
-                return;
-            }
-
-            resultDiv.innerHTML = "<p>Checking Solana mainnet…</p>";
-
-            try {
-                // 1️⃣ First lookup – see what kind of account this is
-                const infoResult = await rpcCall("getAccountInfo", [
-                    address,
-                    { encoding: "jsonParsed" }
-                ], 1);
-
-                const account = infoResult.value;
-
-                if (!account) {
-                    resultDiv.innerHTML =
-                        "<p style='color:#ff0066;'>Invalid address — no account exists at this pubkey.</p>";
-                    return;
-                }
-
-                const ownerProgram = account.owner;
-                const parsed = account.data && account.data.parsed ? account.data.parsed : null;
-                const parsedType = parsed ? parsed.type : null;
-                const parsedInfo = parsed ? parsed.info || {} : {};
-
-                // SPL Token program IDs
-                const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-                const TOKEN_2022_PROGRAM = "TokenzQdGq8cYk6TKfNfGKEbDU9zG6GbdsuUuWg2u7W";
-
-                // If this is a token *account*, get its mint then check that mint
-                if (parsedType === "account" && parsedInfo.mint) {
-                    const mintAddress = parsedInfo.mint;
-
-                    resultDiv.innerHTML =
-                        `<p style="color:#ffaa00;">Detected token account → checking mint: ${mintAddress}</p>`;
-
-                    await checkMintAuthority(mintAddress, resultDiv);
-                    return;
-                }
-
-                // If this looks like a mint (owned by token program), treat it as a mint
-                if (ownerProgram === TOKEN_PROGRAM || ownerProgram === TOKEN_2022_PROGRAM) {
-                    await checkMintAuthority(address, resultDiv, parsedType, parsedInfo);
-                    return;
-                }
-
-                // Anything else: valid account, but not a token mint / token account
-                resultDiv.innerHTML = `
-                    <p style="color:#ffaa00;">Valid Solana account, but not an SPL token mint or token account.</p>
-                    <p>Owner program: <code>${ownerProgram}</code></p>
-                `;
-            } catch (err) {
-                console.error(err);
-                resultDiv.innerHTML =
-                    `<p style="color:#ff0066;">Network / RPC error. Open DevTools → Console to see details.</p>`;
+            while (carry) {
+                digits.push(carry % 58);
+                carry = (carry / 58) | 0;
             }
         }
+        return digits.reverse().map(d => alphabet[d]).join("");
+    }
 
-        async function checkMintAuthority(mintAddress, resultDiv, parsedType = null, parsedInfo = null) {
-            // If we already have parsed mint info from the first call, reuse it.
-            let mintParsedType = parsedType;
-            let mintParsedInfo = parsedInfo;
+    async function checkToken() {
+        const address = document.getElementById("tokenInput").value.trim();
+        const result = document.getElementById("result");
 
-            if (!mintParsedInfo || mintParsedType !== "mint") {
-                // 2️⃣ Fetch mint account info specifically
-                const mintResult = await rpcCall("getAccountInfo", [
-                    mintAddress,
-                    { encoding: "jsonParsed" }
-                ], 2);
-
-                if (!mintResult.value) {
-                    resultDiv.innerHTML =
-                        "<p style='color:#ff0066;'>This address exists but is not a parsed SPL token mint.</p>";
-                    return;
-                }
-
-                const mintAccount = mintResult.value;
-                const mintParsed = mintAccount.data && mintAccount.data.parsed ? mintAccount.data.parsed : null;
-                mintParsedType = mintParsed ? mintParsed.type : null;
-                mintParsedInfo = mintParsed ? mintParsed.info || {} : {};
-            }
-
-            if (mintParsedType !== "mint") {
-                resultDiv.innerHTML = `
-                    <p style="color:#ffaa00;">Valid token account, but mint data isn’t in standard parsed format.</p>
-                    <p>We can’t reliably read mint authority from this RPC.</p>
-                `;
-                return;
-            }
-
-            const mintAuthorityOption = mintParsedInfo.mintAuthorityOption;
-            const mintAuthority = mintParsedInfo.mintAuthority || null;
-
-            if (mintAuthorityOption === 0) {
-                // No authority present
-                resultDiv.innerHTML = `
-                    <p style="color:#00ff88; font-size:32px;">🟢 LOW RISK</p>
-                    <p style="color:#00ff88; font-size:22px;">Mint authority RENOUNCED</p>
-                    <p>Dev cannot mint more tokens from this mint account.</p>
-                    <p style="font-size:14px; opacity:0.8;">Mint: <code>${mintAddress}</code></p>
-                `;
-            } else if (mintAuthorityOption === 1 && mintAuthority) {
-                resultDiv.innerHTML = `
-                    <p style="color:#ff0066; font-size:32px;">🔴 HIGH RISK</p>
-                    <p style="color:#ff0066; font-size:22px;">Mint authority ACTIVE</p>
-                    <p>Dev (or another authority) can mint more tokens.</p>
-                    <p style="font-size:14px; opacity:0.8;">
-                        Mint: <code>${mintAddress}</code><br>
-                        Authority: <code>${mintAuthority}</code>
-                    </p>
-                `;
-            } else {
-                // Parsed, but no clear mintAuthorityOption field
-                resultDiv.innerHTML = `
-                    <p style="color:#ffaa00; font-size:28px;">🟡 RISK UNKNOWN</p>
-                    <p>Mint exists, but RPC did not return standard mint authority fields.</p>
-                    <p style="font-size:14px; opacity:0.8;">Mint: <code>${mintAddress}</code></p>
-                `;
-            }
+        if (!address) {
+            result.innerHTML = "<p style='color:#ff0066;'>Enter a token mint address.</p>";
+            return;
         }
-    </script>
+
+        result.innerHTML = "<p>Checking on-chain data...</p>";
+
+        const info = await rpc("getAccountInfo", [address, { encoding: "base64" }]);
+
+        if (!info || !info.value) {
+            result.innerHTML = "<p style='color:#ff0066;'>Not a valid account on Solana.</p>";
+            return;
+        }
+
+        const [dataBase64] = info.value.data;
+
+        let mint;
+        try {
+            mint = decodeMintAccount(dataBase64);
+        } catch (e) {
+            result.innerHTML = `
+                <p style="color:#ffaa00;">Token exists, but cannot decode mint layout.</p>
+            `;
+            return;
+        }
+
+        if (mint.mintAuthorityOption === 0) {
+            result.innerHTML = `
+                <p style="color:#00ff88; font-size:28px;">🟢 LOW RISK</p>
+                <p>Mint authority renounced.</p>
+                <p>Dev CANNOT mint more tokens — anti-rug protection.</p>
+            `;
+        } else {
+            result.innerHTML = `
+                <p style="color:#ff0066; font-size:28px;">🔴 HIGH RISK</p>
+                <p>Mint authority ACTIVE.</p>
+                <p>Dev CAN mint unlimited tokens — classic rug setup.</p>
+                <p><small>Mint authority: ${mint.mintAuthority}</small></p>
+            `;
+        }
+    }
+</script>
 
 </body>
 </html>
