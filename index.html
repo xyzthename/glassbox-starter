@@ -1,61 +1,158 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Glassbox – Instant Solana Rug Checker</title>
+
     <style>
-        body {font-family:Arial,sans-serif;text-align:center;padding:50px;background:#000;color:#fff;margin:0;line-height:1.6}
-        h1 {font-size:3.5em;margin-bottom:10px}
-        p {font-size:1.3em}
-        input {width:100%;max-width:680px;padding:18px;font-size:18px;border-radius:12px;border:1px solid #444;background:#111;color:#fff;margin:25px auto;display:block;box-sizing:border-box}
-        button {padding:18px 50px;background:#00ff88;color:#000;border:none;border-radius:12px;font-weight:bold;font-size:20px;cursor:pointer}
-        button:hover {background:#00cc77}
-        #result {margin:50px auto;padding:35px;border-radius:16px;max-width:680px;background:#111;border:2px solid #333;min-height:140px;font-size:22px}
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 40px;
+            background: #000;
+            color: #fff;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 3.5em;
+            margin-bottom: 10px;
+        }
+
+        input {
+            width: 100%;
+            max-width: 600px;
+            padding: 16px;
+            font-size: 18px;
+            border-radius: 12px;
+            border: 1px solid #444;
+            background: #111;
+            color: #fff;
+            margin: 20px auto;
+            display: block;
+        }
+
+        button {
+            padding: 16px 40px;
+            background: #00ff88;
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        #result {
+            margin: 40px auto;
+            padding: 30px;
+            border-radius: 16px;
+            max-width: 600px;
+            background: #111;
+            border: 2px solid #333;
+            min-height: 120px;
+            font-size: 20px;
+        }
     </style>
 </head>
+
 <body>
+
     <h1>Glassbox</h1>
     <p>Paste any Solana token address → instant rug risk check (100% free)</p>
-    
-    <input id="tokenInput" placeholder="e.g. DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263 (BONK)" />
+
+    <input id="tokenInput" type="text"
+        placeholder="e.g. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (USDC)">
     <button onclick="checkToken()">Check Token Now</button>
+
     <div id="result"></div>
 
-    <script type="module">
-        const rpcUrl = import.meta.env.VITE_RPC_URL;
-
+    <script>
         async function checkToken() {
-            let address = document.getElementById("tokenInput").value.trim() || "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+
+            let address = document.getElementById("tokenInput").value.trim();
             const resultDiv = document.getElementById("result");
-            resultDiv.innerHTML = "<p style='color:#aaa;'>Scanning…</p>";
+
+            if (!address) {
+                resultDiv.innerHTML = "<p style='color:#ff0066;'>Paste a token address first</p>";
+                return;
+            }
+
+            resultDiv.innerHTML = "<p>Checking Solana mainnet...</p>";
 
             try {
-                let resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
-                    body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
+                // 1 — Initial lookup (may be token account OR mint)
+                const resp = await fetch("https://api.mainnet-beta.solana.com", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        jsonrpc: "2.0",
+                        id: 1,
+                        method: "getAccountInfo",
+                        params: [address, { encoding: "jsonParsed" }]
+                    })
                 });
-                let data = await resp.json();
+
+                const data = await resp.json();
+
+                // If this is a token *account*, extract the real mint address
                 if (data.result?.value?.data?.parsed?.type === "account") {
-                    address = data.result.value.data.parsed.info.mint;
+                    const realMint = data.result.value.data.parsed.info.mint;
+
+                    resultDiv.innerHTML =
+                        `<p style="color:#ffaa00;">Token account detected → checking mint: ${realMint}</p>`;
+
+                    address = realMint; // correct the address
                 }
-                resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
-                    body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
+
+                // 2 — Fetch MINT authority info
+                const mintResp = await fetch("https://api.mainnet-beta.solana.com", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        jsonrpc: "2.0",
+                        id: 2,
+                        method: "getAccountInfo",
+                        params: [address, { encoding: "jsonParsed" }]
+                    })
                 });
-                data = await resp.json();
 
-                const isRenounced = data.result.value.data.parsed.info.mintAuthorityOption === 0;
+                const mintData = await mintResp.json();
 
-                resultDiv.innerHTML = isRenounced 
-                    ? `<div style="color:#00ff88;"><p style="font-size:48px;margin:8px 0;">LOW RISK</p><p style="font-size:32px;">Mint Authority RENOUNCED</p><p>Dev cannot mint more — safe!</p></div>`
-                    : `<div style="color:#ff0066;"><p style="font-size:48px;margin:8px 0;">HIGH RISK</p><p style="font-size:32px;">MINT AUTHORITY ACTIVE</p><p>Dev can print unlimited — rug risk!</p></div>`;
-            } catch(e) {
-                resultDiv.innerHTML = "<p style='color:#ff0066;'>Failed – wrong key or rate limit</p>";
+                if (!mintData.result?.value) {
+                    resultDiv.innerHTML =
+                        `<p style="color:#ff0066;">Invalid mint address — not a real token</p>`;
+                    return;
+                }
+
+                const info = mintData.result.value.data.parsed.info;
+
+                const isRenounced = info.mintAuthorityOption === 0;
+
+                // 3 — Output result
+                if (isRenounced) {
+                    resultDiv.innerHTML = `
+                        <p style="color:#00ff88; font-size:36px;">🟢 LOW RISK</p>
+                        <p style="color:#00ff88; font-size:24px;">Mint authority RENOUNCED</p>
+                        <p>Dev cannot print more tokens — strong anti-rug protection.</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <p style="color:#ff0066; font-size:36px;">🔴 HIGH RISK</p>
+                        <p style="color:#ff0066; font-size:24px;">Mint authority ACTIVE</p>
+                        <p>Dev can mint unlimited supply → classic rug-pull setup.</p>
+                    `;
+                }
+
+            } catch (err) {
+                resultDiv.innerHTML =
+                    `<p style="color:#ff0066;">Network or RPC error — try again.</p>`;
             }
         }
     </script>
 
-    <p style="margin-top:100px;color:#888;font-size:15px;">
-        Built live in public by a broke dev who got rugged too many times<br>Follow: @xyzthename
-    </p>
 </body>
+
 </html>
