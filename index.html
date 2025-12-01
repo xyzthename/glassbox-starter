@@ -17,9 +17,7 @@
       --warn: #ffb347;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -534,9 +532,7 @@
       cursor: pointer;
     }
 
-    .tool-btn span {
-      font-size: 11px;
-    }
+    .tool-btn span { font-size: 11px; }
 
     .tool-btn:hover {
       border-color: var(--accent);
@@ -557,9 +553,7 @@
       flex-wrap: wrap;
     }
 
-    .actions-right {
-      margin-left: auto;
-    }
+    .actions-right { margin-left: auto; }
 
     .btn-ghost {
       border-radius: 999px;
@@ -598,9 +592,7 @@
       font-weight: 500;
     }
 
-    footer a:hover {
-      text-decoration: underline;
-    }
+    footer a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -825,12 +817,12 @@
         const holdersListHtml = topHolders.length
           ? `<div class="holders-list">
               ${topHolders
-                .map(
-                  (h) =>
-                    `<a class="holder-chip" href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener noreferrer">
-                      ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%
-                    </a>`
-                )
+                .map((h, idx) => {
+                  const rank = String(idx + 1).padStart(2, "0");
+                  return `<a class="holder-chip" href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener noreferrer">
+                      ${rank}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%
+                    </a>`;
+                })
                 .join("")}
              </div>`
           : `<div class="result-small" style="margin-top:4px;">
@@ -901,10 +893,15 @@
               <div class="metric-value">${formatUsd(globalFeesUsd)}</div>
             </div>
             <div class="metric-pill">
-              <div class="metric-label">Top holders (tracked)</div>
+              <div class="metric-label">Holders</div>
               <div class="metric-value">
                 ${holdersTracked != null ? holdersTracked.toLocaleString() : "—"}
               </div>
+              ${
+                holdersTop10 != null
+                  ? `<div class="metric-sub">${holdersTop10.toFixed(1)}% in top 10</div>`
+                  : ""
+              }
             </div>
           </div>
 
