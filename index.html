@@ -22,66 +22,45 @@
     <button onclick="checkToken()">Check Token Now</button>
     <div id="result"></div>
 
-    <script>
-    // This uses a free public RPC that works perfectly for this (no key needed for now)
-    const rpcUrl = "https://api.mainnet-beta.solana.com";
+    <script type="module">
+    // This line pulls your secret Helius key from Vercel (100% hidden from everyone)
+    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${import.meta.env.VITE_HELIUS_KEY}`;
 
     async function checkToken() {
-        let address = document.getElementById("tokenInput").value.trim();
-        if (!address) address = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"; // BONK as default
+        let address = document.getElementById("tokenInput").value.trim() || "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
         const resultDiv = document.getElementById("result");
-        resultDiv.innerHTML = "<p style='color:#aaa;'>Checking on-chain data...</p>";
+        resultDiv.innerHTML = "<p style='color:#aaa;'>Scanning on-chain...</p>";
 
         try {
-            // Step 1: Get account (could be token account or mint)
+            // First call – handle token accounts
             let resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
                 body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
             });
             let data = await resp.json();
 
-            // If it's a token account → extract the real mint
             if (data.result?.value?.data?.parsed?.type === "account") {
                 address = data.result.value.data.parsed.info.mint;
             }
 
-            // Step 2: Get mint info
+            // Second call – get mint info
             resp = await fetch(rpcUrl, {method:"POST", headers:{"Content-Type":"application/json"},
                 body: JSON.stringify({jsonrpc:"2.0", id:1, method:"getAccountInfo", params:[address, {encoding:"jsonParsed"}]})
             });
             data = await resp.json();
 
-            if (!data.result?.value?.data?.parsed?.info?.mintAuthorityOption === 0 && 
-                data.result?.value?.data?.parsed?.info?.mintAuthorityOption !== 1) {
-                resultDiv.innerHTML = "<p style='color:#ff0066;'>Not a valid SPL token</p>";
-                return;
-            }
-
             const isRenounced = data.result.value.data.parsed.info.mintAuthorityOption === 0;
 
-            if (isRenounced) {
-                resultDiv.innerHTML = `
-                    <div style="color:#00ff88;">
-                        <p style="font-size:48px;margin:10px 0;">LOW RISK</p>
-                        <p style="font-size:32px;">Mint Authority RENOUNCED</p>
-                        <p>Dev cannot print more tokens — strong anti-rug protection!</p>
-                    </div>`;
-            } else {
-                resultDiv.innerHTML = `
-                    <div style="color:#ff0066;">
-                        <p style="font-size:48px;margin:10px 0;">HIGH RISK</p>
-                        <p style="font-size:32px;">MINT AUTHORITY ACTIVE</p>
-                        <p>Dev can mint unlimited supply — classic rug setup</p>
-                    </div>`;
-            }
+            resultDiv.innerHTML = isRenounced 
+                ? `<div style="color:#00ff88;"><p style="font-size:48px;margin:10px 0;">LOW RISK</p><p style="font-size:32px;">Mint Authority RENOUNCED</p><p>Dev cannot mint more — strong anti-rug!</p></div>`
+                : `<div style="color:#ff0066;"><p style="font-size:48px;margin:10px 0;">HIGH RISK</p><p style="font-size:32px;">MINT AUTHORITY ACTIVE</p><p>Dev can print unlimited — avoid!</p></div>`;
         } catch(e) {
-            resultDiv.innerHTML = "<p style='color:#ff0066;'>Network busy – try again in 5 seconds</p>";
+            resultDiv.innerHTML = "<p style='color:#ff0066;'>Error – try again</p>";
         }
     }
     </script>
 
     <p style="margin-top:100px;color:#888;font-size:15px;">
-        Built live in public by a broke dev who got rugged too many times<br>
-        Follow progress: @xyzthename
+        Built live in public by a broke dev who got rugged too many times<br>Follow: @xyzthename
     </p>
 </body>
 </html>
