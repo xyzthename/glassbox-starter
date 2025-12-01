@@ -57,7 +57,8 @@
 <div id="result"></div>
 
 <script>
-    const RPC = "https://api.mainnet-beta.solana.com";
+    // FIXED RPC ENDPOINT (works in browser)
+    const RPC = "https://rpc.ankr.com/solana";
 
     async function rpc(method, params) {
         const res = await fetch(RPC, {
@@ -69,12 +70,8 @@
         return data.result;
     }
 
-    // Decode SPL token mint from base64 → extract mintAuthorityOption + mintAuthority pubkey
     function decodeMintAccount(base64Data) {
         const raw = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-
-        // Mint layout offsets:
-        // https://spl.solana.com/token#token-mint
         return {
             mintAuthorityOption: raw[0],
             mintAuthority: bs58Encode(raw.slice(4, 36)),
@@ -83,7 +80,8 @@
 
     function bs58Encode(bytes) {
         const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-        let carry, digits = [0];
+        let carry;
+        let digits = [0];
         for (let i = 0; i < bytes.length; i++) {
             carry = bytes[i];
             for (let j = 0; j < digits.length; j++) {
@@ -123,9 +121,7 @@
         try {
             mint = decodeMintAccount(dataBase64);
         } catch (e) {
-            result.innerHTML = `
-                <p style="color:#ffaa00;">Token exists, but cannot decode mint layout.</p>
-            `;
+            result.innerHTML = `<p style="color:#ffaa00;">Unable to parse mint data.</p>`;
             return;
         }
 
@@ -140,7 +136,7 @@
                 <p style="color:#ff0066; font-size:28px;">🔴 HIGH RISK</p>
                 <p>Mint authority ACTIVE.</p>
                 <p>Dev CAN mint unlimited tokens — classic rug setup.</p>
-                <p><small>Mint authority: ${mint.mintAuthority}</small></p>
+                <p><small>Authority: ${mint.mintAuthority}</small></p>
             `;
         }
     }
