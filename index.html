@@ -31,15 +31,33 @@
     }
     .shell {
       width: 100%;
-      max-width: 740px;
+      max-width: 760px;
       padding: 32px 20px;
     }
     .card {
       background: linear-gradient(145deg, #111119, #0a0a10);
       border-radius: 24px;
-      padding: 32px 28px 28px;
+      padding: 32px 28px 24px;
       border: 1px solid var(--border);
       box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background: radial-gradient(
+        circle at top left,
+        rgba(0, 255, 154, 0.12),
+        transparent 55%
+      );
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .card-inner {
+      position: relative;
+      z-index: 1;
     }
     h1 {
       margin: 0 0 4px;
@@ -51,6 +69,7 @@
       margin: 0 0 20px;
       color: var(--text-muted);
       font-size: 0.98rem;
+      max-width: 520px;
     }
     .pill-row {
       display: inline-flex;
@@ -58,7 +77,7 @@
       gap: 8px;
       padding: 6px 12px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.02);
+      background: rgba(5, 5, 20, 0.6);
       border: 1px solid rgba(255, 255, 255, 0.05);
       font-size: 0.75rem;
       color: var(--text-muted);
@@ -132,21 +151,10 @@
       border-radius: 18px;
       background: #05050b;
       border: 1px dashed var(--border);
-      min-height: 90px;
+      min-height: 110px;
       text-align: left;
       position: relative;
       overflow: hidden;
-    }
-    .result::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(
-        circle at top left,
-        rgba(0, 255, 154, 0.06),
-        transparent 55%
-      );
-      pointer-events: none;
     }
     .tag {
       display: inline-flex;
@@ -197,202 +205,4 @@
     }
     .result-small {
       margin-top: 8px;
-      font-size: 0.78rem;
-      color: #686a86;
-    }
-    .footer {
-      margin-top: 14px;
-      font-size: 0.76rem;
-      color: var(--text-muted);
-      text-align: left;
-      opacity: 0.9;
-    }
-    .footer strong {
-      color: var(--accent);
-      font-weight: 500;
-    }
-    @media (max-width: 640px) {
-      .card {
-        padding: 24px 18px 20px;
-      }
-      .form-row {
-        flex-direction: column;
-      }
-      .form-row button {
-        width: 100%;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="shell">
-    <div class="card">
-      <div class="pill-row">
-        <span class="pill-dot"></span>
-        Live Solana mint authority scanner · v0.1
-      </div>
-
-      <h1>Glassbox</h1>
-      <p class="subtitle">
-        Check if a token’s mint authority is renounced before you ape. No wallet
-        connect, no signup, just on-chain facts.
-      </p>
-
-      <div class="form-row">
-        <input
-          id="mintInput"
-          type="text"
-          placeholder="Paste a Solana token mint address (e.g. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)"
-        />
-        <button id="checkBtn">Check Token</button>
-      </div>
-      <div class="helper">
-        Tip: grab the <span>mint</span> from Solscan / Dexscreener / Birdeye, not
-        a wallet or pool address.
-      </div>
-
-      <div id="result" class="result">
-        <div class="tag info">
-          <span class="tag-dot"></span>
-          <span>Status · Waiting for input</span>
-        </div>
-        <div class="result-title">No token checked yet.</div>
-        <div class="result-text">
-          Paste any Solana token mint above and hit “Check Token” to see whether
-          the dev can still print supply.
-        </div>
-      </div>
-
-      <div class="footer">
-        Built in public by <strong>you</strong>. This is not financial advice —
-        just raw mint authority data from Solana via Helius.
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const resultBox = document.getElementById("result");
-    const inputEl = document.getElementById("mintInput");
-    const btnEl = document.getElementById("checkBtn");
-
-    function setResult(state) {
-      if (state.type === "idle") {
-        resultBox.innerHTML = `
-          <div class="tag info">
-            <span class="tag-dot"></span>
-            <span>Status · Waiting for input</span>
-          </div>
-          <div class="result-title">No token checked yet.</div>
-          <div class="result-text">
-            Paste any Solana token mint above and hit “Check Token” to see whether
-            the dev can still print supply.
-          </div>
-        `;
-      } else if (state.type === "loading") {
-        resultBox.innerHTML = `
-          <div class="tag info">
-            <span class="tag-dot"></span>
-            <span>Querying Solana…</span>
-          </div>
-          <div class="result-title">Checking mint authority on-chain.</div>
-          <div class="result-text">Talking to the Glassbox node. This usually takes under a second.</div>
-        `;
-      } else if (state.type === "low") {
-        resultBox.innerHTML = `
-          <div class="tag low">
-            <span class="tag-dot"></span>
-            <span>Mint authority renounced</span>
-          </div>
-          <div class="result-title">🟢 Low rug risk from mint side.</div>
-          <div class="result-text">
-            This mint has <strong>no active authority</strong>. The dev cannot print new tokens from the mint,
-            which removes one of the biggest rug vectors.
-          </div>
-          <div class="result-small">Mint: <code>${state.mint}</code></div>
-        `;
-      } else if (state.type === "high") {
-        resultBox.innerHTML = `
-          <div class="tag high">
-            <span class="tag-dot"></span>
-            <span>Mint authority active</span>
-          </div>
-          <div class="result-title">🔴 High rug risk from mint side.</div>
-          <div class="result-text">
-            This mint still has an active authority. The dev (or whoever controls it)
-            <strong>can mint new tokens</strong> and nuke the chart at any time.
-          </div>
-          <div class="result-small">
-            Mint: <code>${state.mint}</code><br/>
-            Authority: <code>${state.authority}</code>
-          </div>
-        `;
-      } else if (state.type === "error") {
-        resultBox.innerHTML = `
-          <div class="tag high">
-            <span class="tag-dot"></span>
-            <span>Error</span>
-          </div>
-          <div class="result-title">Couldn’t read that mint.</div>
-          <div class="result-text">
-            ${state.message}
-          </div>
-        `;
-      }
-    }
-
-    setResult({ type: "idle" });
-
-    async function handleCheck() {
-      const mint = inputEl.value.trim();
-      if (!mint) {
-        setResult({
-          type: "error",
-          message: "Paste a Solana token mint address first.",
-        });
-        return;
-      }
-
-      setResult({ type: "loading" });
-
-      try {
-        const res = await fetch(`/api/check?mint=${encodeURIComponent(mint)}`);
-        const data = await res.json();
-
-        if (!res.ok || !data.ok) {
-          setResult({
-            type: "error",
-            message: data.message || "Unknown error from backend.",
-          });
-          return;
-        }
-
-        if (data.risk === "LOW") {
-          setResult({ type: "low", mint: data.mint });
-        } else if (data.risk === "HIGH") {
-          setResult({
-            type: "high",
-            mint: data.mint,
-            authority: data.mintAuthority || "Unknown",
-          });
-        } else {
-          setResult({
-            type: "error",
-            message: "Mint exists, but mint authority could not be read.",
-          });
-        }
-      } catch (err) {
-        console.error(err);
-        setResult({
-          type: "error",
-          message: "Network error. Try again in a few seconds.",
-        });
-      }
-    }
-
-    btnEl.addEventListener("click", handleCheck);
-    inputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") handleCheck();
-    });
-  </script>
-</body>
-</html>
+      font-size: 0
