@@ -24,6 +24,109 @@ function readU64LE(bytes, offset) {
   return lo + (hi << 32n);
 }
 
+// Format a big supply into a human-readable string, e.g. 1_000_000_000 -> "1.00B"
+function formatSupplyHuman(supplyBig, decimals) {
+  try {
+    if (typeof decimals !== "number" || decimals < 0 || decimals > 18) {
+      return supplyBig.toString();
+    }
+    const factor = 10n ** BigInt(decimals);
+    const whole = supplyBig / factor;
+    const fraction = supplyBig % factor;
+
+    // Build a decimal string with up to 3 fractional digits
+    let fracStr = fraction.toString().padStart(decimals, "0");
+    fracStr = fracStr.replace(/0+$/, ""); // trim trailing zeros
+    if (fracStr.length > 3) fracStr = fracStr.slice(0, 3).replace(/0+$/, "");
+    const baseStr =
+      fracStr && fracStr.length > 0
+        ? `${whole.toString()}.${fracStr}`
+        : whole.toString();
+
+    // Abbreviate (K, M, B, T) using the whole part
+    const wholeNum = Number(whole);
+    if (!Number.isFinite(wholeNum)) {
+      return baseStr;
+    }
+    const abs = Math.abs(wholeNum);
+    let suffix = "";
+    let value = wholeNum;
+
+    if (abs >= 1_000_000_000_000) {
+      suffix = "T";
+      value = wholeNum / 1_000_000_000_000;
+    } else if (abs >= 1_000_000_000) {
+      suffix = "B";
+      value = wholeNum / 1_000_000_000;
+    } else if (abs >= 1_000_000) {
+      suffix = "M";
+      value = wholeNum / 1_000_000;
+    } else if (abs >= 1_000) {
+      suffix = "K";
+      value = wholeNum / 1_000;
+    } else {
+      // no abbreviation
+      return baseStr;
+    }
+
+    return `${value.toFixed(2)}${suffix}`;
+  } catch (e) {
+    console.error("formatSupplyHuman error:", e);
+    return supplyBig.toString();
+  }
+}
+
+// Fetch token metadata (name, symbol, image) using Helius getAsset
+async function fetchMetadata(rpcUrl, mintAddress) {
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getAsset",
+        params: { id: mintAddress },
+      }),
+    });
+
+    const meta = await response.json();
+    const asset = meta?.result;
+    if (!asset) return null;
+
+    return {
+      name: asset.content?.metadata?.name || null,
+      symbol: asset.content?.metadata?.symbol || null,
+      image: asset.content?.links?.image || null,
+    };
+  } catch (err) {
+    console.error("Metadata fetch failed:", err);
+    return null;
+  }
+}
+
+// Fetch price in USD from Jupiter Price API (no key required)
+async function fetchJupiterPrice(mintAddress) {
+  try {
+    const url = `https://lite-api.jup.ag/price/v3?ids=${encodeURIComponent(
+      mintAddress
+    )}`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const info = json[mintAddress];
+    if (!info || typeof info.usdPrice !== "number") return null;
+
+    return {
+      usdPrice: info.usdPrice,
+      priceChange24h:
+        typeof info.priceChange24h === "number" ? info.priceChange24h : null,
+    };
+  } catch (err) {
+    console.error("Price fetch failed:", err);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   const { mint } = req.query;
 
@@ -40,7 +143,6 @@ export default async function handler(req, res) {
   }
 
   const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
-  const ASSET_URL = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
 
   async function rpc(method, params) {
     const raw = await fetch(RPC_URL, {
@@ -57,36 +159,6 @@ export default async function handler(req, res) {
     const json = await raw.json();
     if (json.error) throw new Error(json.error.message);
     return json.result;
-  }
-
-  // Fetch token metadata using Helius "getAsset"
-  async function fetchMetadata(mintAddress) {
-    try {
-      const response = await fetch(ASSET_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "getAsset",
-          params: { id: mintAddress },
-        }),
-      });
-
-      const meta = await response.json();
-      const asset = meta?.result;
-
-      if (!asset) return null;
-
-      return {
-        name: asset.content?.metadata?.name || null,
-        symbol: asset.content?.metadata?.symbol || null,
-        image: asset.content?.links?.image || null,
-      };
-    } catch (err) {
-      console.error("Metadata fetch failed:", err);
-      return null;
-    }
   }
 
   try {
@@ -109,6 +181,7 @@ export default async function handler(req, res) {
     let mintAddress = mint;
 
     if (parsedType === "account") {
+      // user pasted a token account; hop to its mint
       mintAddress = parsedInfo.mint;
     }
 
@@ -132,7 +205,7 @@ export default async function handler(req, res) {
     }
     offset += 32;
 
-    const supply = readU64LE(raw, offset);
+    const supplyBig = readU64LE(raw, offset);
     offset += 8;
 
     const decimals = raw[offset++];
@@ -148,7 +221,7 @@ export default async function handler(req, res) {
 
     let riskMint = mintAuthorityOption === 0 ? "LOW" : "HIGH";
 
-    // 3. Holder snapshot
+    // 3. Holder snapshot (top holders)
     let holders = null;
     try {
       const largest = await rpc("getTokenLargestAccounts", [mintAddress]);
@@ -162,7 +235,7 @@ export default async function handler(req, res) {
         for (let i = 0; i < list.length && i < 10; i++) {
           const ent = list[i];
           const pct =
-            Number((BigInt(ent.amount) * 10000n) / (supply || 1n)) / 100;
+            Number((BigInt(ent.amount) * 10000n) / (supplyBig || 1n)) / 100;
 
           top.push({
             rank: i + 1,
@@ -177,17 +250,30 @@ export default async function handler(req, res) {
 
       holders = { top, top1, top10 };
     } catch (e) {
+      console.error("Holder snapshot failed:", e);
       holders = null;
     }
 
-    // 4. Token metadata
-    const metadata = await fetchMetadata(mintAddress);
+    // 4. Token metadata (name, symbol, image)
+    const metadata = await fetchMetadata(RPC_URL, mintAddress);
+
+    // 5. Price (USD) from Jupiter Price API
+    const price = await fetchJupiterPrice(mintAddress);
+
+    // 6. Human-readable supply
+    const uiSupplyFormatted = formatSupplyHuman(supplyBig, decimals);
+
+    // NOTE: Liquidity + global fees are set to null for now; they require
+    // an external analytics provider (Birdeye / Bitquery / custom indexer).
+    const liquidity = null;
+    const feesGlobal = null;
 
     return res.status(200).json({
       ok: true,
       mint: mintAddress,
       decimals,
-      supply: supply.toString(),
+      supply: supplyBig.toString(),
+      uiSupplyFormatted,
       isInitialized,
       riskMint,
       mintAuthorityOption,
@@ -196,6 +282,9 @@ export default async function handler(req, res) {
       freezeAuthority,
       holders,
       metadata,
+      price,
+      liquidity,
+      feesGlobal,
     });
   } catch (err) {
     console.error("Backend error:", err);
