@@ -1,296 +1,233 @@
-import bs58 from "bs58";
+// api/check.js
+// Serverless function for Vercel
+// Uses Helius RPC to fetch mint info + metadata + top holders.
 
-const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-const TOKEN_2022_PROGRAM = "TokenzQdGq8cYk6TKfNfGKEbDU9zG6GbdsuUuWg2u7W";
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 
-const BURN_ADDRESSES = [
-  "11111111111111111111111111111111",
-  "Burn111111111111111111111111111111111111111",
-  "DeaD111111111111111111111111111111111111111",
-];
+const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-function readU32(bytes, offset) {
-  return (
-    bytes[offset] |
-    (bytes[offset + 1] << 8) |
-    (bytes[offset + 2] << 16) |
-    (bytes[offset + 3] << 24)
-  ) >>> 0;
-}
+async function rpc(method, params) {
+  const res = await fetch(RPC_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params,
+    }),
+  });
 
-function readU64LE(bytes, offset) {
-  const lo = BigInt(readU32(bytes, offset));
-  const hi = BigInt(readU32(bytes, offset + 4));
-  return lo + (hi << 32n);
-}
-
-// Format a big supply into a human-readable string, e.g. 1_000_000_000 -> "1.00B"
-function formatSupplyHuman(supplyBig, decimals) {
-  try {
-    if (typeof decimals !== "number" || decimals < 0 || decimals > 18) {
-      return supplyBig.toString();
-    }
-    const factor = 10n ** BigInt(decimals);
-    const whole = supplyBig / factor;
-    const fraction = supplyBig % factor;
-
-    // Build a decimal string with up to 3 fractional digits
-    let fracStr = fraction.toString().padStart(decimals, "0");
-    fracStr = fracStr.replace(/0+$/, ""); // trim trailing zeros
-    if (fracStr.length > 3) fracStr = fracStr.slice(0, 3).replace(/0+$/, "");
-    const baseStr =
-      fracStr && fracStr.length > 0
-        ? `${whole.toString()}.${fracStr}`
-        : whole.toString();
-
-    // Abbreviate (K, M, B, T) using the whole part
-    const wholeNum = Number(whole);
-    if (!Number.isFinite(wholeNum)) {
-      return baseStr;
-    }
-    const abs = Math.abs(wholeNum);
-    let suffix = "";
-    let value = wholeNum;
-
-    if (abs >= 1_000_000_000_000) {
-      suffix = "T";
-      value = wholeNum / 1_000_000_000_000;
-    } else if (abs >= 1_000_000_000) {
-      suffix = "B";
-      value = wholeNum / 1_000_000_000;
-    } else if (abs >= 1_000_000) {
-      suffix = "M";
-      value = wholeNum / 1_000_000;
-    } else if (abs >= 1_000) {
-      suffix = "K";
-      value = wholeNum / 1_000;
-    } else {
-      // no abbreviation
-      return baseStr;
-    }
-
-    return `${value.toFixed(2)}${suffix}`;
-  } catch (e) {
-    console.error("formatSupplyHuman error:", e);
-    return supplyBig.toString();
+  if (!res.ok) {
+    throw new Error(`RPC error: ${res.status} ${res.statusText}`);
   }
+  const json = await res.json();
+  if (json.error) {
+    throw new Error(json.error.message || "RPC error");
+  }
+  return json.result;
 }
 
-// Fetch token metadata (name, symbol, image) using Helius getAsset
-async function fetchMetadata(rpcUrl, mintAddress) {
-  try {
-    const response = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "getAsset",
-        params: { id: mintAddress },
-      }),
-    });
+// Decode mint account data just enough to know:
+// - supply
+// - decimals
+// - whether mint authority / freeze authority exist
+function parseMintAccount(base64Data) {
+  const raw = Buffer.from(base64Data, "base64");
+  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
 
-    const meta = await response.json();
-    const asset = meta?.result;
-    if (!asset) return null;
+  let offset = 0;
 
-    return {
-      name: asset.content?.metadata?.name || null,
-      symbol: asset.content?.metadata?.symbol || null,
-      image: asset.content?.links?.image || null,
-    };
-  } catch (err) {
-    console.error("Metadata fetch failed:", err);
-    return null;
-  }
+  // u32: mintAuthorityOption
+  const mintAuthOpt = view.getUint32(offset, true);
+  const hasMintAuthority = mintAuthOpt !== 0;
+  offset += 4 + 32; // skip option + pubkey bytes
+
+  // u64: supply (little endian)
+  const low = view.getUint32(offset, true);
+  const high = view.getUint32(offset + 4, true);
+  const supplyBig = BigInt(low) + (BigInt(high) << 32n);
+  offset += 8;
+
+  // u8: decimals
+  const decimals = raw[offset];
+  offset += 1;
+
+  // u8: isInitialized (unused here)
+  offset += 1;
+
+  // u32: freezeAuthorityOption
+  const freezeOpt = view.getUint32(offset, true);
+  const hasFreezeAuthority = freezeOpt !== 0;
+
+  return {
+    supply: supplyBig.toString(),
+    decimals,
+    hasMintAuthority,
+    hasFreezeAuthority,
+  };
 }
 
-// Fetch price in USD from Jupiter Price API (no key required)
-async function fetchJupiterPrice(mintAddress) {
-  try {
-    const url = `https://lite-api.jup.ag/price/v3?ids=${encodeURIComponent(
-      mintAddress
-    )}`;
-    const res = await fetch(url);
-    const json = await res.json();
-    const info = json[mintAddress];
-    if (!info || typeof info.usdPrice !== "number") return null;
-
-    return {
-      usdPrice: info.usdPrice,
-      priceChange24h:
-        typeof info.priceChange24h === "number" ? info.priceChange24h : null,
-    };
-  } catch (err) {
-    console.error("Price fetch failed:", err);
-    return null;
-  }
+function shortAddr(addr) {
+  if (!addr || addr.length <= 8) return addr;
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
 export default async function handler(req, res) {
-  const { mint } = req.query;
-
-  if (!mint || typeof mint !== "string") {
-    return res.status(400).json({ ok: false, message: "Missing ?mint= address" });
-  }
-
-  const heliusKey = process.env.HELIUS_API_KEY;
-  if (!heliusKey) {
-    return res.status(500).json({
-      ok: false,
-      message: "Missing Helius API key on server.",
-    });
-  }
-
-  const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
-
-  async function rpc(method, params) {
-    const raw = await fetch(RPC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method,
-        params,
-      }),
-    });
-
-    const json = await raw.json();
-    if (json.error) throw new Error(json.error.message);
-    return json.result;
-  }
-
   try {
-    // 1. Load account
-    const accountInfo = await rpc("getAccountInfo", [
+    if (req.method !== "GET") {
+      res.setHeader("Allow", "GET");
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+
+    const mint = (req.query.mint || "").trim();
+
+    if (!mint) {
+      return res.status(400).json({ error: "Missing mint query parameter" });
+    }
+    if (!HELIUS_API_KEY) {
+      return res
+        .status(500)
+        .json({ error: "HELIUS_API_KEY is not set in environment" });
+    }
+
+    // 1) Fetch mint account info
+    const accountInfoPromise = rpc("getAccountInfo", [
       mint,
-      { encoding: "jsonParsed" },
-    ]);
-
-    if (!accountInfo || !accountInfo.value) {
-      return res.status(200).json({
-        ok: false,
-        message: "No account at that address.",
-      });
-    }
-
-    const acc = accountInfo.value;
-    const parsedType = acc.data?.parsed?.type;
-    const parsedInfo = acc.data?.parsed?.info;
-    let mintAddress = mint;
-
-    if (parsedType === "account") {
-      // user pasted a token account; hop to its mint
-      mintAddress = parsedInfo.mint;
-    }
-
-    // 2. Get raw mint data
-    const mintAccount = await rpc("getAccountInfo", [
-      mintAddress,
       { encoding: "base64" },
     ]);
 
-    const [base64Data] = mintAccount.value.data;
-    const raw = Buffer.from(base64Data, "base64");
+    // 2) Fetch Jupiter-style metadata via Helius getAsset
+    const assetPromise = rpc("getAsset", [mint]);
 
-    let offset = 0;
+    // 3) Fetch largest token accounts (top holders)
+    const largestPromise = rpc("getTokenLargestAccounts", [mint]);
 
-    const mintAuthorityOption = readU32(raw, offset);
-    offset += 4;
+    const [accountInfo, asset, largest] = await Promise.all([
+      accountInfoPromise,
+      assetPromise,
+      largestPromise,
+    ]);
 
-    let mintAuthority = null;
-    if (mintAuthorityOption === 1) {
-      mintAuthority = bs58.encode(raw.subarray(offset, offset + 32));
-    }
-    offset += 32;
-
-    const supplyBig = readU64LE(raw, offset);
-    offset += 8;
-
-    const decimals = raw[offset++];
-    const isInitialized = raw[offset++] === 1;
-
-    const freezeAuthorityOption = readU32(raw, offset);
-    offset += 4;
-
-    let freezeAuthority = null;
-    if (freezeAuthorityOption === 1) {
-      freezeAuthority = bs58.encode(raw.subarray(offset, offset + 32));
+    if (!accountInfo?.value) {
+      return res
+        .status(404)
+        .json({ error: "Not a valid SPL mint account on Solana." });
     }
 
-    let riskMint = mintAuthorityOption === 0 ? "LOW" : "HIGH";
+    const dataBase64 = accountInfo.value.data?.[0];
+    const parsedMint = parseMintAccount(dataBase64);
 
-    // 3. Holder snapshot (top holders)
-    let holders = null;
+    const mintInfo = {
+      supply: parsedMint.supply, // string
+      decimals: parsedMint.decimals,
+    };
+
+    const mintAuthority = parsedMint.hasMintAuthority;
+    const freezeAuthority = parsedMint.hasFreezeAuthority;
+
+    // Token metadata from asset
+    let name = "Unknown Token";
+    let symbol = "";
+    let logoURI = null;
+
     try {
-      const largest = await rpc("getTokenLargestAccounts", [mintAddress]);
-      const list = largest?.value || [];
-
-      const top = [];
-      let top1 = 0;
-      let top10 = 0;
-
-      if (list.length > 0) {
-        for (let i = 0; i < list.length && i < 10; i++) {
-          const ent = list[i];
-          const pct =
-            Number((BigInt(ent.amount) * 10000n) / (supplyBig || 1n)) / 100;
-
-          top.push({
-            rank: i + 1,
-            address: ent.address,
-            percent: pct,
-          });
-
-          if (i === 0) top1 = pct;
-          top10 += pct;
-        }
+      if (asset?.content?.metadata) {
+        name = asset.content.metadata.name || name;
+        symbol = asset.content.metadata.symbol || symbol;
       }
-
-      holders = { top, top1, top10 };
+      if (asset?.content?.links?.image) {
+        logoURI = asset.content.links.image;
+      }
     } catch (e) {
-      console.error("Holder snapshot failed:", e);
-      holders = null;
+      // ignore meta failure
     }
 
-    // 4. Token metadata (name, symbol, image)
-    const metadata = await fetchMetadata(RPC_URL, mintAddress);
+    const tokenMeta = { name, symbol, logoURI };
 
-    // 5. Price (USD) from Jupiter Price API
-    const price = await fetchJupiterPrice(mintAddress);
+    // Top holders
+    const largestAccounts = largest?.value || [];
+    const totalHolders = largestAccounts.length;
 
-    // 6. Human-readable supply
-    const uiSupplyFormatted = formatSupplyHuman(supplyBig, decimals);
+    const supplyBN = BigInt(parsedMint.supply || "0") || 1n;
 
-    // NOTE: Liquidity + global fees are set to null for now; they require
-    // an external analytics provider (Birdeye / Bitquery / custom indexer).
-    const liquidity = null;
-    const feesGlobal = null;
+    const topHolders = largestAccounts.slice(0, 10).map((entry) => {
+      const amountBN = BigInt(entry.amount || "0");
+      const pct = Number((amountBN * 10_000n) / supplyBN) / 100; // %
+      return {
+        address: entry.address,
+        pct,
+        uiAmount: entry.uiAmount,
+      };
+    });
+
+    const top10Pct = topHolders.reduce((sum, h) => sum + (h.pct || 0), 0);
+
+    const holderSummary = {
+      totalHolders,
+      top10Pct,
+      topHolders,
+    };
+
+    // Very simple origin hint
+    let originLabel = "Unknown protocol / origin";
+    let originDetail = "";
+    const lowerMint = mint.toLowerCase();
+
+    if (lowerMint.endsWith("pump")) {
+      originLabel = "Likely Pump.fun mint";
+      originDetail =
+        "Mint resembles Pump.fun pattern. Always double-check creator + socials.";
+    }
+
+    const originHint = {
+      label: originLabel,
+      detail: originDetail,
+    };
+
+    // Simple risk model
+    let level = "medium";
+    let blurb = "";
+    let score = 50;
+
+    if (!mintAuthority && !freezeAuthority && top10Pct <= 25) {
+      level = "low";
+      blurb =
+        "Mint authority renounced, no freeze authority, and top holders are reasonably distributed.";
+      score = 90;
+    } else if (!mintAuthority && top10Pct <= 60) {
+      level = "medium";
+      blurb =
+        "Mint authority renounced, but supply is still fairly concentrated.";
+      score = 65;
+    } else {
+      level = "high";
+      blurb =
+        "Mint authority or freeze authority is still active and/or top holders control a large portion of supply.";
+      score = 25;
+    }
+
+    const riskSummary = { level, blurb, score };
+
+    // Placeholder metrics; you can plug real price/liquidity later from a DEX API
+    const tokenMetrics = {
+      priceUsd: null,
+      liquidityUsd: null,
+      globalFeesUsd: null,
+    };
 
     return res.status(200).json({
-      ok: true,
-      mint: mintAddress,
-      decimals,
-      supply: supplyBig.toString(),
-      uiSupplyFormatted,
-      isInitialized,
-      riskMint,
-      mintAuthorityOption,
+      tokenMeta,
+      mintInfo,
       mintAuthority,
-      freezeAuthorityOption,
       freezeAuthority,
-      holders,
-      metadata,
-      price,
-      liquidity,
-      feesGlobal,
+      holderSummary,
+      originHint,
+      riskSummary,
+      tokenMetrics,
     });
   } catch (err) {
-    console.error("Backend error:", err);
-    return res.status(500).json({
-      ok: false,
-      message: "Backend RPC error.",
-    });
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Internal error" });
   }
 }
