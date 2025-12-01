@@ -215,10 +215,11 @@
       cursor: pointer;
     }
 
-    .preset-btn span {
-      color: var(--accent);
-      font-weight: 600;
-    }
+    .preset-risk-safe { color: #22c55e; font-weight: 600; }
+    .preset-risk-caution { color: #eab308; font-weight: 600; }
+    .preset-risk-risky { color: #f97316; font-weight: 600; }
+    .preset-risk-veryrisk { color: #ef4444; font-weight: 600; }
+    .preset-risk-unknown { color: var(--text-muted); }
 
     /* Right pane */
     .result-card {
@@ -347,7 +348,8 @@
     .scam-score-fill {
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #22c55e, #eab308, #f97316, #ef4444);
+      /* low -> high = red → green */
+      background: linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e);
       transform-origin: left;
       transform: scaleX(0.5);
     }
@@ -654,7 +656,7 @@
                 <li>Mint &amp; freeze authority status</li>
                 <li>Holder concentration risk + top wallets</li>
                 <li>Protocol origin hints</li>
-                <li>Readable supply, price, liquidity &amp; holder count</li>
+                <li>Readable supply, price, liquidity &amp; token age</li>
               </ul>
               Then route to Jupiter, DexScreener, Axiom, Photon, BullX, Padre, or StalkFun in one tap.
             </div>
@@ -756,14 +758,22 @@
     function labelForRisk(level) {
       if (level === "low") return "Safe";
       if (level === "medium") return "Caution";
+      if (level === "risky") return "Risky";
       if (level === "high") return "Very risky";
       return "Unknown";
+    }
+
+    function presetRiskClass(level) {
+      if (level === "low") return "preset-risk-safe";
+      if (level === "medium") return "preset-risk-caution";
+      if (level === "risky") return "preset-risk-risky";
+      if (level === "high") return "preset-risk-veryrisk";
+      return "preset-risk-unknown";
     }
 
     function renderRecentRow() {
       const recent = loadRecent();
       if (!recent.length) {
-        // defaults
         const defaults = [
           {
             mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1",
@@ -780,7 +790,8 @@
           .map(
             (r) =>
               `<button class="preset-btn" data-mint="${r.mint}">
-                 ${r.display} <span>· ${labelForRisk(r.level)}</span>
+                 ${r.display}
+                 <span class="${presetRiskClass(r.level)}">· ${labelForRisk(r.level)}</span>
                </button>`
           )
           .join("");
@@ -789,7 +800,8 @@
           .map(
             (r) =>
               `<button class="preset-btn" data-mint="${r.mint}">
-                 ${r.display} <span>· ${labelForRisk(r.level)}</span>
+                 ${r.display}
+                 <span class="${presetRiskClass(r.level)}">· ${labelForRisk(r.level)}</span>
                </button>`
           )
           .join("");
@@ -813,6 +825,39 @@
       const trimmed = filtered.slice(0, 5);
       saveRecent(trimmed);
       renderRecentRow();
+    }
+
+    function formatAge(tokenAge) {
+      const days = tokenAge?.ageDays;
+      if (days == null || isNaN(days)) {
+        return { main: "—", sub: "" };
+      }
+      if (days < 1) {
+        const hours = Math.floor(days * 24);
+        return {
+          main: `${hours}h`,
+          sub: "since mint",
+        };
+      }
+      if (days < 30) {
+        const d = Math.floor(days);
+        return {
+          main: `${d}d`,
+          sub: "since mint",
+        };
+      }
+      if (days < 365) {
+        const months = (days / 30).toFixed(1);
+        return {
+          main: `${months}m`,
+          sub: `≈ ${Math.floor(days)} days`,
+        };
+      }
+      const years = (days / 365).toFixed(1);
+      return {
+        main: `${years}y`,
+        sub: `≈ ${Math.floor(days)} days`,
+      };
     }
 
     async function handleCheck() {
@@ -843,11 +888,11 @@
           originHint,
           riskSummary,
           tokenMetrics,
+          tokenAge,
         } = data;
 
         const canonicalMint = mint.trim();
 
-        // build external URLs
         const jupUrl = `https://jup.ag/swap/SOL-${canonicalMint}?ref=3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG`;
         const dexscreenerUrl = `https://dexscreener.com/solana/${canonicalMint}`;
 
@@ -894,7 +939,6 @@
           holdersTop10 != null
             ? Math.min(100, Math.max(0, holdersTop10))
             : 0;
-        const holdersTracked = holderSummary?.totalHolders ?? null;
         const topHolders = holderSummary?.topHolders || [];
 
         const holdersLabel =
@@ -927,6 +971,8 @@
           : `<div class="result-small" style="margin-top:4px;">
                Holder list not available for this mint yet.
              </div>`;
+
+        const ageFmt = formatAge(tokenAge);
 
         // Update recent tokens list
         const displayForRecent =
@@ -1007,19 +1053,11 @@
               <div class="metric-value">${formatUsd(globalFeesUsd)}</div>
             </div>
             <div class="metric-pill">
-              <div class="metric-label">Holders</div>
-              <div class="metric-value">
-                ${
-                  holdersTracked != null
-                    ? holdersTracked.toLocaleString()
-                    : "—"
-                }
-              </div>
+              <div class="metric-label">Token Age</div>
+              <div class="metric-value">${ageFmt.main}</div>
               ${
-                holdersTop10 != null
-                  ? `<div class="metric-sub">${holdersTop10.toFixed(
-                      1
-                    )}% in top 10</div>`
+                ageFmt.sub
+                  ? `<div class="metric-sub">${ageFmt.sub}</div>`
                   : ""
               }
             </div>
