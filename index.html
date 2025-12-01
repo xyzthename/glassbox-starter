@@ -68,4 +68,42 @@
             });
             const mintData = await mintResp.json();
 
-            if (!mintData.result?.value)
+            if (!mintData.result?.value) {
+                resultDiv.innerHTML = `<p style="color:#ff0066;">Invalid token mint address</p>`;
+                return;
+            }
+
+            const mintInfo = mintData.result.value.data.parsed.info;
+            const isRenounced = mintInfo.mintAuthorityOption === 0;
+
+            if (isRenounced) {
+                resultDiv.innerHTML = `
+                    <div style="color:#00ff88;">
+                        <p style="font-size:42px; margin:10px 0;">LOW RISK</p>
+                        <p style="font-size:28px; margin:10px 0;">Mint Authority RENOUNCED</p>
+                        <p>Dev cannot print more tokens — huge anti-rug protection</p>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div style="color:#ff0066;">
+                        <p style="font-size:42px; margin:10px 0;">HIGH RISK</p>
+                        <p style="font-size:28px; margin:10px 0;">MINT AUTHORITY STILL ACTIVE</p>
+                        <p>Dev can mint unlimited supply → classic rug setup</p>
+                        <p>Avoid or extreme DYOR</p>
+                    </div>
+                `;
+            }
+
+        } catch (error) {
+            resultDiv.innerHTML = `<p style="color:#ff0066;">Network error — try again</p>`;
+        }
+    }
+    </script>
+
+    <p style="margin-top:100px; color:#888; font-size:15px;">
+        Built live in public by a broke dev who got rugged too many times<br>
+        Follow progress: @xyzthename
+    </p>
+</body>
+</html>
