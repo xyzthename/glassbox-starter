@@ -15,6 +15,7 @@
       --text-muted: #9ca3b5;
       --danger: #ff4b6b;
       --warn: #ffb347;
+      --boost: #facc15;
     }
 
     * { box-sizing: border-box; }
@@ -250,6 +251,7 @@
       font-weight: 600;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
     }
 
@@ -413,7 +415,6 @@
       padding: 8px 9px;
       border: 1px dashed rgba(51, 65, 85, 0.9);
       background: rgba(15, 23, 42, 0.9);
-      margin-top: 4px;
     }
 
     .result-section h3 {
@@ -430,6 +431,7 @@
       gap: 8px;
       font-size: 11px;
       margin-bottom: 2px;
+      align-items: center;
     }
 
     .result-label {
@@ -446,6 +448,7 @@
       font-weight: 600;
       border: 1px solid rgba(148, 163, 184, 0.6);
       background: rgba(15, 23, 42, 0.9);
+      text-align: center;
     }
 
     .badge-good {
@@ -464,6 +467,12 @@
       border-color: rgba(234, 179, 8, 0.8);
       color: var(--warn);
       background: rgba(234, 179, 8, 0.16);
+    }
+
+    .badge-boost {
+      border-color: rgba(250, 204, 21, 0.9);
+      color: var(--boost);
+      background: rgba(250, 204, 21, 0.18);
     }
 
     .holders-bar {
@@ -669,7 +678,6 @@
     </div>
   </div>
 
-  <!-- SCRIPT -->
   <script>
     const API_BASE = "/api/check";
     const RECENT_KEY = "glassbox_recent_mints_v1";
@@ -694,114 +702,56 @@
       }
     }
 
-    // ---------- PRICE FORMATTING (with 0.0₆57 style) ----------
-
-    const SUBSCRIPT_MAP = {
-      "0": "₀",
-      "1": "₁",
-      "2": "₂",
-      "3": "₃",
-      "4": "₄",
-      "5": "₅",
-      "6": "₆",
-      "7": "₇",
-      "8": "₈",
-      "9": "₉",
-    };
+    const SUBSCRIPT_DIGITS = ["₀","₁","₂","₃","₄","₅","₆","₇","₈","₉"];
 
     function toSubscript(num) {
       return String(num)
         .split("")
-        .map((d) => SUBSCRIPT_MAP[d] || d)
+        .map((d) => SUBSCRIPT_DIGITS[Number(d)] ?? d)
         .join("");
     }
 
-    // For super tiny prices like 0.00000057 → "$0.0₆57"
-    function formatTinyUsd(n) {
-      if (!isFinite(n) || n <= 0) return "$0";
-
-      const s = n.toFixed(12);
-      const parts = s.split(".");
-      const dec = (parts[1] || "").replace(/0+$/, "");
-
-      if (!dec) return "$0";
-
-      let zeroCount = 0;
-      let digits = "";
-      for (const ch of dec) {
-        if (ch === "0" && digits === "") {
-          zeroCount++;
-        } else {
-          digits += ch;
-        }
-      }
-      if (!digits) return "$0";
-
-      const sub = toSubscript(zeroCount);
-      return `$0.0${sub}${digits}`;
+    function formatTinyPrice(n) {
+      const abs = Math.abs(n);
+      if (!isFinite(abs) || abs === 0) return "0";
+      const parts = abs.toExponential(8).split("e"); // e.g. "5.70000000e-7"
+      if (parts.length !== 2) return abs.toString();
+      const mantStr = parts[0];
+      const exp = Number(parts[1]); // negative
+      if (!isFinite(exp)) return abs.toString();
+      const zeros = Math.max(0, Math.abs(exp) - 1);
+      const sigDigits =
+        mantStr.replace(".", "").replace(/^0+/, "").slice(0, 2) || "0";
+      const subscriptZeros = toSubscript(zeros);
+      return `0.0${subscriptZeros}${sigDigits}`;
     }
 
     function formatUsd(value) {
-      if (value === null || value === undefined || isNaN(value)) return "N/A";
+      if (value === null || value === undefined) return "N/A";
       const n = Number(value);
-      if (!isFinite(n) || n <= 0) return "$0";
+      if (!isFinite(n)) return "N/A";
+      if (n === 0) return "$0";
 
-      if (n < 0.0001) {
-        return formatTinyUsd(n);
+      const abs = Math.abs(n);
+
+      // Super tiny prices, show 0.0₆57 style
+      if (abs < 0.0001) {
+        return "$" + formatTinyPrice(abs);
       }
 
-      if (n < 1) {
-        return (
-          "$" +
-          n
-            .toFixed(6)
-            .replace(/0+$/, "")
-            .replace(/\.$/, "")
-        );
+      if (abs < 1) return "$" + abs.toFixed(4);
+      if (abs < 1000) return "$" + abs.toFixed(2);
+      if (abs < 1_000_000) {
+        return "$" + abs.toLocaleString(undefined, { maximumFractionDigits: 0 });
       }
-      if (n < 1000) {
-        return (
-          "$" +
-          n
-            .toFixed(4)
-            .replace(/0+$/, "")
-            .replace(/\.$/, "")
-        );
+      if (abs < 1_000_000_000) {
+        return "$" + (abs / 1_000_000).toFixed(2) + "M";
       }
-      if (n < 1_000_000) {
-        return "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      if (abs < 1_000_000_000_000) {
+        return "$" + (abs / 1_000_000_000).toFixed(2) + "B";
       }
-      if (n < 1_000_000_000) {
-        return (
-          "$" +
-          (n / 1_000_000)
-            .toFixed(2)
-            .replace(/0+$/, "")
-            .replace(/\.$/, "") +
-          "M"
-        );
-      }
-      if (n < 1_000_000_000_000) {
-        return (
-          "$" +
-          (n / 1_000_000_000)
-            .toFixed(2)
-            .replace(/0+$/, "")
-            .replace(/\.$/, "") +
-          "B"
-        );
-      }
-      return (
-        "$" +
-        (n / 1_000_000_000_000)
-          .toFixed(2)
-          .replace(/0+$/, "")
-          .replace(/\.$/, "") +
-        "T"
-      );
+      return "$" + (abs / 1_000_000_000_000).toFixed(2) + "T";
     }
-
-    // ---------- OTHER HELPERS ----------
 
     function formatNumber(value) {
       if (value == null || isNaN(value)) return "—";
@@ -825,8 +775,7 @@
 
     function renderError(message) {
       errorBox.style.display = "block";
-      errorBox.textContent =
-        message || "Something went wrong while checking this mint.";
+      errorBox.textContent = message || "Something went wrong while checking this mint.";
       resultBox.innerHTML = "";
     }
 
@@ -883,25 +832,21 @@
         ];
         recentRow.innerHTML = defaults
           .map(
-            (r) => `
-              <button class="preset-btn" data-mint="${r.mint}">
-                ${r.display}
-                <span class="${presetRiskClass(r.level)}">· ${labelForRisk(
-                  r.level
-                )}</span>
-              </button>`
+            (r) =>
+              `<button class="preset-btn" data-mint="${r.mint}">
+                 ${r.display}
+                 <span class="${presetRiskClass(r.level)}">· ${labelForRisk(r.level)}</span>
+               </button>`
           )
           .join("");
       } else {
         recentRow.innerHTML = recent
           .map(
-            (r) => `
-              <button class="preset-btn" data-mint="${r.mint}">
-                ${r.display}
-                <span class="${presetRiskClass(r.level)}">· ${labelForRisk(
-                  r.level
-                )}</span>
-              </button>`
+            (r) =>
+              `<button class="preset-btn" data-mint="${r.mint}">
+                 ${r.display}
+                 <span class="${presetRiskClass(r.level)}">· ${labelForRisk(r.level)}</span>
+               </button>`
           )
           .join("");
       }
@@ -933,21 +878,31 @@
       }
       if (days < 1) {
         const hours = Math.floor(days * 24);
-        return { main: `${hours}h`, sub: "since mint" };
+        return {
+          main: `${hours}h`,
+          sub: "since mint",
+        };
       }
       if (days < 30) {
         const d = Math.floor(days);
-        return { main: `${d}d`, sub: "since mint" };
+        return {
+          main: `${d}d`,
+          sub: "since mint",
+        };
       }
       if (days < 365) {
         const months = (days / 30).toFixed(1);
-        return { main: `${months}m`, sub: `≈ ${Math.floor(days)} days` };
+        return {
+          main: `${months}m`,
+          sub: `≈ ${Math.floor(days)} days`,
+        };
       }
       const years = (days / 365).toFixed(1);
-      return { main: `${years}y`, sub: `≈ ${Math.floor(days)} days` };
+      return {
+        main: `${years}y`,
+        sub: `≈ ${Math.floor(days)} days`,
+      };
     }
-
-    // ---------- MAIN SCAN HANDLER ----------
 
     async function handleCheck() {
       const mint = (mintInput.value || "").trim();
@@ -978,6 +933,8 @@
           riskSummary,
           tokenMetrics,
           tokenAge,
+          dexInfo,
+          liquidityInfo,
         } = data;
 
         const canonicalMint = mint.trim();
@@ -1011,6 +968,7 @@
         const symbol = tokenMeta?.symbol || "";
         const logo = tokenMeta?.logoURI || null;
 
+        // metrics
         const priceUsd = tokenMetrics?.priceUsd ?? null;
         const liquidityUsd = tokenMetrics?.liquidityUsd ?? null;
         const globalFeesUsd = tokenMetrics?.globalFeesUsd ?? null;
@@ -1055,13 +1013,53 @@
                     </a>`;
                 })
                 .join("")}
-            </div>`
+             </div>`
           : `<div class="result-small" style="margin-top:4px;">
-              Holder list not available for this mint yet.
-            </div>`;
+               Holder list not available for this mint yet.
+             </div>`;
 
         const ageFmt = formatAge(tokenAge);
 
+        // Dex + LP info (placeholders until wired)
+        const lpLockedPct =
+          typeof liquidityInfo?.lockedPct === "number"
+            ? liquidityInfo.lockedPct
+            : null;
+
+        let lpLabel = "N/A (coming soon)";
+        let lpClass = "badge-warn";
+        if (lpLockedPct != null) {
+          lpLabel = `${lpLockedPct.toFixed(1)}% locked / burnt`;
+          if (lpLockedPct >= 70) lpClass = "badge-good";
+          else if (lpLockedPct >= 30) lpClass = "badge-warn";
+          else lpClass = "badge-bad";
+        }
+
+        const dexPaid = dexInfo?.paid;
+        let dexPaidLabel = "Unknown";
+        let dexPaidClass = "badge-warn";
+        if (dexPaid === true) {
+          dexPaidLabel = "Paid (profile claimed)";
+          dexPaidClass = "badge-good";
+        } else if (dexPaid === false) {
+          dexPaidLabel = "Unpaid (not claimed)";
+          dexPaidClass = "badge-bad";
+        }
+
+        const dexBoost = dexInfo?.boostUsd;
+        let dexBoostLabel = "Unknown";
+        let dexBoostClass = "badge-warn";
+        if (typeof dexBoost === "number") {
+          if (dexBoost > 0) {
+            dexBoostLabel = `Boosted: ${formatUsd(dexBoost)}`;
+            dexBoostClass = "badge-boost";
+          } else {
+            dexBoostLabel = "No boost";
+            dexBoostClass = "badge-bad";
+          }
+        }
+
+        // Update recent tokens list
         const displayForRecent =
           symbol || name || shortAddr(canonicalMint) || "Token";
         addRecent({
@@ -1084,9 +1082,7 @@
           <div class="token-title-row">
             <div class="token-logo" style="${
               logo
-                ? "background-image:url('" +
-                  logo.replace(/'/g, "\\'") +
-                  "');"
+                ? `background-image:url('${logo.replace(/'/g, "\\'")}');`
                 : "background: radial-gradient(circle at 30% 10%, #4ade80, #16a34a);"
             }"></div>
             <div style="min-width:0;">
@@ -1129,9 +1125,13 @@
             </div>
             <div class="metric-pill">
               <div class="metric-label">Total Supply</div>
-              <div class="metric-value">${
-                supplyHuman != null ? formatNumber(supplyHuman) : "—"
-              }</div>
+              <div class="metric-value">
+                ${
+                  supplyHuman != null
+                    ? formatNumber(supplyHuman)
+                    : "—"
+                }
+              </div>
             </div>
             <div class="metric-pill">
               <div class="metric-label">Global Fees Paid</div>
@@ -1150,20 +1150,38 @@
 
           <div class="result-sections">
             <div class="result-section">
-              <h3>Mint &amp; freeze controls</h3>
+              <h3>TOKEN INFO</h3>
               <div class="result-row">
                 <span class="result-label">Mint authority</span>
                 <span class="badge ${
                   renouncedMint ? "badge-good" : "badge-bad"
                 }">
-                  ${renouncedMint ? "Renounced / Disabled" : "Can still mint"}
+                  ${
+                    renouncedMint
+                      ? "Renounced / Disabled"
+                      : "Active (can still mint)"
+                  }
                 </span>
               </div>
               <div class="result-row">
                 <span class="result-label">Freeze authority</span>
-                <span class="badge ${canFreeze ? "badge-bad" : "badge-good"}">
-                  ${canFreeze ? "Can freeze tokens" : "None"}
+                <span class="badge ${
+                  canFreeze ? "badge-bad" : "badge-good"
+                }">
+                  ${canFreeze ? "Yes (can freeze tokens)" : "None"}
                 </span>
+              </div>
+              <div class="result-row">
+                <span class="result-label">Liquidity pool</span>
+                <span class="badge ${lpClass}">${lpLabel}</span>
+              </div>
+              <div class="result-row">
+                <span class="result-label">Dex paid</span>
+                <span class="badge ${dexPaidClass}">${dexPaidLabel}</span>
+              </div>
+              <div class="result-row">
+                <span class="result-label">Dex boost</span>
+                <span class="badge ${dexBoostClass}">${dexBoostLabel}</span>
               </div>
               <div class="result-small">
                 ${
@@ -1171,6 +1189,9 @@
                     ? "Dev can still print new tokens into their own wallets or LP."
                     : "No more supply can be minted from this mint authority."
                 }
+              </div>
+              <div class="result-small">
+                Liquidity lock, Dex paid & boost data will be wired in using Dexscreener / lockers.
               </div>
             </div>
 
@@ -1185,11 +1206,7 @@
                     ? "badge-warn"
                     : "badge-bad"
                 }">
-                  ${
-                    holdersTop10 != null
-                      ? `${holdersTop10.toFixed(1)}%`
-                      : "Unknown"
-                  }
+                  ${holdersTop10 != null ? `${holdersTop10.toFixed(1)}%` : "Unknown"}
                 </span>
               </div>
               <div class="holders-bar">
@@ -1204,8 +1221,8 @@
             <h3>Origin signal</h3>
             <div class="origin-row">
               <strong>${originText}</strong>${
-          originDetail ? ` · ${originDetail}` : ""
-        }
+                originDetail ? ` · ${originDetail}` : ""
+              }
             </div>
             <div class="result-small">
               Origin hints help you see whether this came from a known protocol (Pump, Bags,
@@ -1291,6 +1308,7 @@
       }
     });
 
+    // initial recent row
     renderRecentRow();
   </script>
 </body>
