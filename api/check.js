@@ -1,15 +1,16 @@
-// /api/check.js
-// Serverless function for Vercel
-// Uses Helius RPC for mint + metadata + holders
-// plus DexScreener for price / liquidity / token age / listing info.
+// api/check.js
+// GlassBox backend
+// - Helius RPC for mint + holders
+// - DexScreener for price / liquidity / age
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
-
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
-const DEX_API_BASE = "https://api.dexscreener.com";
 
-// Simple JSON-RPC helper for Helius / Solana
-async function rpc(method, params) {
+async function heliusRpc(method, params) {
+  if (!HELIUS_API_KEY) {
+    throw new Error("HELIUS_API_KEY is not set in environment");
+  }
+
   const res = await fetch(RPC_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -31,10 +32,41 @@ async function rpc(method, params) {
   return json.result;
 }
 
-// Decode mint account data just enough to know:
-// - supply
-// - decimals
-// - whether mint authority / freeze authority exist
+// getAsset but swallow "Asset Not Found" etc so USDC still scans
+async function safeGetAsset(mint) {
+  try {
+    const result = await heliusRpc("getAsset", [mint]);
+    return result;
+  } catch (err) {
+    const msg = (err?.message || "").toLowerCase();
+    if (
+      msg.includes("asset not found") ||
+      msg.includes("recordnotfound") ||
+      msg.includes("not a token mint")
+    ) {
+      console.warn("getAsset: no metadata for mint", mint, "-", err.message);
+      return null;
+    }
+    console.error("getAsset failed:", err);
+    return null;
+  }
+}
+
+// getTokenLargestAccounts but never kill the whole request
+async function safeGetLargestAccounts(mint) {
+  try {
+    const result = await heliusRpc("getTokenLargestAccounts", [mint]);
+    return result;
+  } catch (err) {
+    console.warn(
+      "getTokenLargestAccounts failed, returning empty holders:",
+      err.message
+    );
+    return { value: [] };
+  }
+}
+
+// Decode mint account data -> supply, decimals, authorities
 function parseMintAccount(base64Data) {
   const raw = Buffer.from(base64Data, "base64");
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
@@ -44,9 +76,9 @@ function parseMintAccount(base64Data) {
   // u32: mintAuthorityOption
   const mintAuthOpt = view.getUint32(offset, true);
   const hasMintAuthority = mintAuthOpt !== 0;
-  offset += 4 + 32; // skip option + pubkey bytes
+  offset += 4 + 32; // option + pubkey
 
-  // u64: supply (little endian)
+  // u64: supply (little-endian)
   const low = view.getUint32(offset, true);
   const high = view.getUint32(offset + 4, true);
   const supplyBig = BigInt(low) + (BigInt(high) << 32n);
@@ -56,7 +88,7 @@ function parseMintAccount(base64Data) {
   const decimals = raw[offset];
   offset += 1;
 
-  // u8: isInitialized (unused here)
+  // u8: isInitialized (unused)
   offset += 1;
 
   // u32: freezeAuthorityOption
@@ -71,100 +103,57 @@ function parseMintAccount(base64Data) {
   };
 }
 
-// Helper to pull some extra data from DexScreener (price, liquidity, age, boosts, paid listing)
-async function fetchDexData(mint) {
-  let priceUsd = null;
-  let liquidityUsd = null;
-  let tokenAge = null;
-  let boostsActive = null;
-  let dexPaid = false;
-  let dexOrderStatus = null;
+function shortAddr(addr) {
+  if (!addr || addr.length <= 8) return addr;
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
+}
 
-  // 1) Token / pair data (price, liquidity, boosts, pairCreatedAt)
+// DexScreener: best-liquidity pair → price, liquidity, age
+async function fetchDexScreenerStats(mint) {
   try {
-    const url = `${DEX_API_BASE}/tokens/v1/solana/${mint}`;
+    const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
     const res = await fetch(url);
-    if (res.ok) {
-      const arr = await res.json();
-      if (Array.isArray(arr) && arr.length > 0) {
-        // Pick the pair with the highest liquidity
-        let best = null;
-        for (const p of arr) {
-          if (!p || typeof p !== "object") continue;
-          const liq =
-            p.liquidity && typeof p.liquidity.usd === "number"
-              ? p.liquidity.usd
-              : Number(p.liquidity?.usd ?? 0);
-          const bestLiq =
-            best && best.liquidity && typeof best.liquidity.usd === "number"
-              ? best.liquidity.usd
-              : Number(best?.liquidity?.usd ?? 0);
-          if (!best || liq > bestLiq) {
-            best = p;
-          }
-        }
+    if (!res.ok) {
+      console.warn("DexScreener HTTP", res.status, res.statusText);
+      return null;
+    }
+    const json = await res.json();
+    const pairs = Array.isArray(json.pairs) ? json.pairs : [];
+    if (!pairs.length) return null;
 
-        if (best) {
-          // priceUsd is a string in the docs, so coerce safely
-          if (best.priceUsd != null) {
-            const parsed = Number(best.priceUsd);
-            if (Number.isFinite(parsed)) {
-              priceUsd = parsed;
-            }
-          }
+    // choose pair with highest USD liquidity
+    let best = pairs[0];
+    for (const p of pairs) {
+      const liq = p?.liquidity?.usd ?? 0;
+      const bestLiq = best?.liquidity?.usd ?? 0;
+      if (liq > bestLiq) best = p;
+    }
 
-          if (best.liquidity && best.liquidity.usd != null) {
-            const l = Number(best.liquidity.usd);
-            if (Number.isFinite(l)) {
-              liquidityUsd = l;
-            }
-          }
+    const priceUsd = best.priceUsd ? Number(best.priceUsd) : null;
+    const liquidityUsd = best.liquidity?.usd ?? null;
 
-          // Approximate token "trading age" from pairCreatedAt
-          if (typeof best.pairCreatedAt === "number") {
-            let createdMs = best.pairCreatedAt;
-            // Heuristic: if it's too small, treat as seconds
-            if (createdMs < 10_000_000_000) {
-              createdMs *= 1000;
-            }
-            const now = Date.now();
-            const ageMs = Math.max(0, now - createdMs);
-            const ageDays = ageMs / (1000 * 60 * 60 * 24);
-            tokenAge = { ageDays };
-          }
-
-          if (best.boosts && typeof best.boosts.active === "number") {
-            boostsActive = best.boosts.active;
-          }
-        }
+    let ageDays = null;
+    const created = best.pairCreatedAt || best.createdAt;
+    if (created) {
+      let ms =
+        typeof created === "number" ? created : Date.parse(String(created));
+      // If it looks like seconds, convert to ms
+      if (ms < 10_000_000_000) {
+        ms *= 1000;
+      }
+      if (!Number.isNaN(ms)) {
+        ageDays = (Date.now() - ms) / (1000 * 60 * 60 * 24);
       }
     }
-  } catch (e) {
-    console.error("DexScreener tokens/v1 error:", e?.message || e);
+
+    // DexScreener doesn’t give a simple “global fees paid” – keep null for now.
+    const globalFeesUsd = null;
+
+    return { priceUsd, liquidityUsd, ageDays, globalFeesUsd };
+  } catch (err) {
+    console.warn("DexScreener fetch failed:", err.message);
+    return null;
   }
-
-  // 2) DexScreener paid orders for this token (listing boosted / featured)
-  try {
-    const ordersUrl = `${DEX_API_BASE}/orders/v1/solana/${mint}`;
-    const res = await fetch(ordersUrl);
-    if (res.ok) {
-      const orders = await res.json();
-      if (Array.isArray(orders) && orders.length > 0) {
-        dexPaid = true;
-        dexOrderStatus = orders[0]?.status || null;
-      }
-    }
-  } catch (e) {
-    console.error("DexScreener orders/v1 error:", e?.message || e);
-  }
-
-  const dexInfo = {
-    paid: dexPaid,
-    status: dexOrderStatus,
-    boostsActive,
-  };
-
-  return { priceUsd, liquidityUsd, tokenAge, dexInfo };
 }
 
 export default async function handler(req, res) {
@@ -175,7 +164,6 @@ export default async function handler(req, res) {
     }
 
     const mint = (req.query.mint || "").trim();
-
     if (!mint) {
       return res.status(400).json({ error: "Missing mint query parameter" });
     }
@@ -185,29 +173,11 @@ export default async function handler(req, res) {
         .json({ error: "HELIUS_API_KEY is not set in environment" });
     }
 
-    // 1) Fetch mint account info
-    const accountInfoPromise = rpc("getAccountInfo", [
+    // 1) Mint account info – strict
+    const accountInfo = await heliusRpc("getAccountInfo", [
       mint,
       { encoding: "base64" },
     ]);
-
-    // 2) Fetch Jupiter-style metadata + price via Helius DAS getAsset
-    // NOTE: DAS expects params as an object: { id: mint }
-    const assetPromise = rpc("getAsset", { id: mint });
-
-    // 3) Fetch largest token accounts (top holders)
-    const largestPromise = rpc("getTokenLargestAccounts", [mint]);
-
-    // 4) Extra metrics from DexScreener (price / liquidity / age / listing / boosts)
-    const dexPromise = fetchDexData(mint);
-
-    const [accountInfo, asset, largest, dexData] = await Promise.all([
-      accountInfoPromise,
-      assetPromise,
-      largestPromise,
-      dexPromise,
-    ]);
-
     if (!accountInfo?.value) {
       return res
         .status(404)
@@ -217,58 +187,55 @@ export default async function handler(req, res) {
     const dataBase64 = accountInfo.value.data?.[0];
     if (!dataBase64) {
       return res
-        .status(500)
-        .json({ error: "Mint account has no data segment." });
+        .status(404)
+        .json({ error: "Unable to read mint account data." });
     }
 
     const parsedMint = parseMintAccount(dataBase64);
-
     const mintInfo = {
-      supply: parsedMint.supply, // string
+      supply: parsedMint.supply,
       decimals: parsedMint.decimals,
     };
-
     const mintAuthority = parsedMint.hasMintAuthority;
     const freezeAuthority = parsedMint.hasFreezeAuthority;
 
-    // Token metadata from asset
+    // 2) Optional metadata + age (Helius asset)
+    const asset = await safeGetAsset(mint);
+
     let name = "Unknown Token";
     let symbol = "";
     let logoURI = null;
 
-    try {
-      if (asset?.content?.metadata) {
-        name = asset.content.metadata.name || name;
-        symbol = asset.content.metadata.symbol || symbol;
-      }
-      if (asset?.content?.links?.image) {
-        logoURI = asset.content.links.image;
-      }
-
-      // If DAS token_info has a symbol/name, prefer those as a fallback
-      if (asset?.token_info) {
-        if (asset.token_info.symbol && !symbol) {
-          symbol = asset.token_info.symbol;
-        }
-        if (asset.token_info.name && name === "Unknown Token") {
-          name = asset.token_info.name;
-        }
-      }
-    } catch (e) {
-      console.error("Metadata parse error:", e?.message || e);
+    if (asset?.content?.metadata) {
+      name = asset.content.metadata.name || name;
+      symbol = asset.content.metadata.symbol || symbol;
+    }
+    if (asset?.content?.links?.image) {
+      logoURI = asset.content.links.image;
     }
 
     const tokenMeta = { name, symbol, logoURI };
 
-    // Top holders (using getTokenLargestAccounts – 20 biggest token accounts)
+    let ageDays = null;
+    if (asset?.native?.createdAt) {
+      let ms = asset.native.createdAt;
+      if (ms < 10_000_000_000) {
+        ms *= 1000;
+      }
+      if (!Number.isNaN(ms)) {
+        ageDays = (Date.now() - ms) / (1000 * 60 * 60 * 24);
+      }
+    }
+
+    // 3) Top holders (best effort)
+    const largest = await safeGetLargestAccounts(mint);
     const largestAccounts = largest?.value || [];
-    const totalHoldersApprox = largestAccounts.length;
 
     const supplyBN = BigInt(parsedMint.supply || "0") || 1n;
 
     const topHolders = largestAccounts.slice(0, 10).map((entry) => {
       const amountBN = BigInt(entry.amount || "0");
-      const pct = Number((amountBN * 10_000n) / supplyBN) / 100; // %
+      const pct = Number((amountBN * 10_000n) / supplyBN) / 100;
       return {
         address: entry.address,
         pct,
@@ -279,12 +246,11 @@ export default async function handler(req, res) {
     const top10Pct = topHolders.reduce((sum, h) => sum + (h.pct || 0), 0);
 
     const holderSummary = {
-      totalHolders: totalHoldersApprox, // this is "top holders count", not full chain-wide holder count
       top10Pct,
       topHolders,
     };
 
-    // Very simple origin hint
+    // 4) Origin hint
     let originLabel = "Unknown protocol / origin";
     let originDetail = "";
     const lowerMint = mint.toLowerCase();
@@ -300,7 +266,7 @@ export default async function handler(req, res) {
       detail: originDetail,
     };
 
-    // Simple risk model based on authorities + holder concentration
+    // 5) Simple risk model
     let level = "medium";
     let blurb = "";
     let score = 50;
@@ -324,37 +290,18 @@ export default async function handler(req, res) {
 
     const riskSummary = { level, blurb, score };
 
-    // Merge tokenMetrics from Helius price (if available) + DexScreener
-    let priceUsd = null;
-    try {
-      const maybePrice =
-        asset?.token_info?.price_info?.price_per_token ??
-        asset?.token_info?.price_info?.pricePerToken;
-      if (maybePrice != null) {
-        const parsed = Number(maybePrice);
-        if (Number.isFinite(parsed)) {
-          priceUsd = parsed;
-        }
-      }
-    } catch (e) {
-      console.error("Price parse from asset error:", e?.message || e);
-    }
-
-    if (priceUsd == null && dexData?.priceUsd != null) {
-      priceUsd = dexData.priceUsd;
-    }
-
-    const liquidityUsd =
-      dexData?.liquidityUsd != null ? dexData.liquidityUsd : null;
+    // 6) Market data via DexScreener
+    const dexStats = await fetchDexScreenerStats(mint);
 
     const tokenMetrics = {
-      priceUsd,
-      liquidityUsd,
-      globalFeesUsd: null, // not available yet (shows as N/A in UI)
+      priceUsd: dexStats?.priceUsd ?? null,
+      liquidityUsd: dexStats?.liquidityUsd ?? null,
+      globalFeesUsd: dexStats?.globalFeesUsd ?? null,
     };
 
-    const tokenAge = dexData?.tokenAge || null;
-    const dexInfo = dexData?.dexInfo || null;
+    const tokenAge = {
+      ageDays: dexStats?.ageDays ?? ageDays ?? null,
+    };
 
     return res.status(200).json({
       tokenMeta,
@@ -366,10 +313,9 @@ export default async function handler(req, res) {
       riskSummary,
       tokenMetrics,
       tokenAge,
-      dexInfo, // not used by your UI yet, but ready for "Dex paid / boost" later
     });
   } catch (err) {
-    console.error(err);
+    console.error("API /api/check error:", err);
     return res.status(500).json({ error: err.message || "Internal error" });
   }
 }
