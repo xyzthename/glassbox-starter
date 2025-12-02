@@ -570,6 +570,12 @@
       cursor: pointer;
     }
 
+    .price-subscript {
+  font-size: 9px;
+  vertical-align: top;
+  opacity: 0.85;
+    }
+
     .error-box {
       font-size: 12px;
       color: var(--danger);
@@ -692,22 +698,28 @@
     }
 
     function formatUsd(value) {
-      if (value === null || value === undefined) return "N/A";
-      const n = Number(value);
-      if (!isFinite(n)) return "N/A";
-      if (n === 0) return "$0";
-      if (n < 0.0001) return "< $0.0001";
-      if (n < 1) return "$" + n.toFixed(4);
-      if (n < 1000) return "$" + n.toFixed(2);
-      if (n < 1_000_000) return "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-      if (n < 1_000_000_000) {
-        return "$" + (n / 1_000_000).toFixed(2) + "M";
-      }
-      if (n < 1_000_000_000_000) {
-        return "$" + (n / 1_000_000_000).toFixed(2) + "B";
-      }
-      return "$" + (n / 1_000_000_000_000).toFixed(2) + "T";
-    }
+  if (value === null || value === undefined) return "N/A";
+  const n = Number(value);
+  if (!isFinite(n)) return "N/A";
+  if (n === 0) return "$0";
+
+  if (n < 1) {
+    return "$" + n.toFixed(6);          // fine for liquidity/fees
+  }
+  if (n < 1000) {
+    return "$" + n.toFixed(2);
+  }
+  if (n < 1_000_000) {
+    return "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+  if (n < 1_000_000_000) {
+    return "$" + (n / 1_000_000).toFixed(2) + "M";
+  }
+  if (n < 1_000_000_000_000) {
+    return "$" + (n / 1_000_000_000).toFixed(2) + "B";
+  }
+  return "$" + (n / 1_000_000_000_000).toFixed(2) + "T";
+}
 
     function formatNumber(value) {
       if (value == null || isNaN(value)) return "—";
@@ -723,6 +735,35 @@
       }
       return (n / 1_000_000_000_000).toFixed(2) + "T";
     }
+
+    function formatPrice(value) {
+  if (value === null || value === undefined) return "N/A";
+  const n = Number(value);
+  if (!isFinite(n) || n <= 0) return "N/A";
+
+  // Normal prices
+  if (n >= 1) {
+    return "$" + n.toFixed(4).replace(/\.?0+$/, "");
+  }
+
+  // n < 1 → Dexscreener style like $0.0₆57
+  const s = n.toFixed(12);          // "0.00000057"
+  const match = s.match(/^0\.0*(\d.*)$/);
+  if (!match) {
+    return "$" + n.toFixed(8).replace(/\.?0+$/, "");
+  }
+
+  const decimalsPart = s.slice(2);  // e.g. "00000057"
+  const firstNonZeroIndex = decimalsPart.search(/[1-9]/);
+  if (firstNonZeroIndex <= 0) {
+    return "$" + n.toFixed(8).replace(/\.?0+$/, "");
+  }
+
+  const zeroCount = firstNonZeroIndex;               // 6 zeros → "₆"
+  const significant = decimalsPart.slice(firstNonZeroIndex); // "57"
+
+  return `$0.0<span class="price-subscript">${zeroCount}</span>${significant}`;
+}
 
     function shortAddr(addr) {
       if (!addr || addr.length <= 8) return addr;
@@ -1075,7 +1116,7 @@
             </div>
             <div class="metric-pill">
               <div class="metric-label">Liquidity</div>
-              <div class="metric-value">${formatUsd(liquidityUsd)}</div>
+              <div class="metric-value">${formatPrice(priceUsd)}</div>
             </div>
             <div class="metric-pill">
               <div class="metric-label">Total Supply</div>
