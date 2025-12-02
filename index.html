@@ -15,7 +15,6 @@
       --text-muted: #9ca3b5;
       --danger: #ff4b6b;
       --warn: #ffb347;
-      --boost: #facc15;
     }
 
     * { box-sizing: border-box; }
@@ -251,7 +250,6 @@
       font-weight: 600;
       display: inline-flex;
       align-items: center;
-      justify-content: center;
       gap: 6px;
     }
 
@@ -431,7 +429,6 @@
       gap: 8px;
       font-size: 11px;
       margin-bottom: 2px;
-      align-items: center;
     }
 
     .result-label {
@@ -448,7 +445,6 @@
       font-weight: 600;
       border: 1px solid rgba(148, 163, 184, 0.6);
       background: rgba(15, 23, 42, 0.9);
-      text-align: center;
     }
 
     .badge-good {
@@ -467,12 +463,6 @@
       border-color: rgba(234, 179, 8, 0.8);
       color: var(--warn);
       background: rgba(234, 179, 8, 0.16);
-    }
-
-    .badge-boost {
-      border-color: rgba(250, 204, 21, 0.9);
-      color: var(--boost);
-      background: rgba(250, 204, 21, 0.18);
     }
 
     .holders-bar {
@@ -502,24 +492,32 @@
 
     /* Holders list */
     .holders-list {
-      margin-top: 4px;
+      margin-top: 8px;
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 6px;
+      justify-content: center;
     }
 
     .holder-chip {
-      font-size: 10px;
-      padding: 3px 7px;
+      font-size: 11px;
+      padding: 4px 10px;
       border-radius: 999px;
       border: 1px solid rgba(148, 163, 184, 0.45);
       background: rgba(15, 23, 42, 0.95);
       color: #e5e7ff;
       text-decoration: none;
+      min-width: 150px;
+      text-align: center;
     }
 
     .holder-chip:hover {
       border-color: var(--accent);
+    }
+
+    .holder-chip-lp {
+      border-color: rgba(56, 189, 248, 0.95);
+      background: rgba(56, 189, 248, 0.16);
     }
 
     /* Tools row */
@@ -653,8 +651,7 @@
           </div>
 
           <footer>
-            Built for degen safety by
-            <a href="https://x.com/" target="_blank" rel="noopener noreferrer">@yourhandle</a>
+            Built for degen safety by <a href="https://x.com/" target="_blank" rel="noopener noreferrer">@yourhandle</a>
           </footer>
         </div>
 
@@ -702,55 +699,61 @@
       }
     }
 
-    const SUBSCRIPT_DIGITS = ["₀","₁","₂","₃","₄","₅","₆","₇","₈","₉"];
+    // Tiny-price formatter using subscript digits like 0.0₆57
+    const SUBSCRIPT_MAP = {
+      "0": "₀",
+      "1": "₁",
+      "2": "₂",
+      "3": "₃",
+      "4": "₄",
+      "5": "₅",
+      "6": "₆",
+      "7": "₇",
+      "8": "₈",
+      "9": "₉",
+    };
 
-    function toSubscript(num) {
-      return String(num)
-        .split("")
-        .map((d) => SUBSCRIPT_DIGITS[Number(d)] ?? d)
-        .join("");
-    }
-
-    function formatTinyPrice(n) {
-      const abs = Math.abs(n);
-      if (!isFinite(abs) || abs === 0) return "0";
-      const parts = abs.toExponential(8).split("e"); // e.g. "5.70000000e-7"
-      if (parts.length !== 2) return abs.toString();
-      const mantStr = parts[0];
-      const exp = Number(parts[1]); // negative
-      if (!isFinite(exp)) return abs.toString();
-      const zeros = Math.max(0, Math.abs(exp) - 1);
-      const sigDigits =
-        mantStr.replace(".", "").replace(/^0+/, "").slice(0, 2) || "0";
-      const subscriptZeros = toSubscript(zeros);
-      return `0.0${subscriptZeros}${sigDigits}`;
-    }
-
-    function formatUsd(value) {
+    function formatTinyUsd(value) {
       if (value === null || value === undefined) return "N/A";
       const n = Number(value);
       if (!isFinite(n)) return "N/A";
       if (n === 0) return "$0";
 
-      const abs = Math.abs(n);
-
-      // Super tiny prices, show 0.0₆57 style
-      if (abs < 0.0001) {
-        return "$" + formatTinyPrice(abs);
+      // Normal ranges first
+      if (n >= 0.0001 && n < 1) return "$" + n.toFixed(6);
+      if (n >= 1 && n < 1000) return "$" + n.toFixed(2);
+      if (n >= 1000 && n < 1_000_000) {
+        return "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      }
+      if (n >= 1_000_000 && n < 1_000_000_000) {
+        return "$" + (n / 1_000_000).toFixed(2) + "M";
+      }
+      if (n >= 1_000_000_000 && n < 1_000_000_000_000) {
+        return "$" + (n / 1_000_000_000).toFixed(2) + "B";
+      }
+      if (n >= 1_000_000_000_000) {
+        return "$" + (n / 1_000_000_000_000).toFixed(2) + "T";
       }
 
-      if (abs < 1) return "$" + abs.toFixed(4);
-      if (abs < 1000) return "$" + abs.toFixed(2);
-      if (abs < 1_000_000) {
-        return "$" + abs.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      // Super tiny: build 0.0₆57 style
+      const s = n.toFixed(12); // 0.000000000123 etc
+      const [, frac = ""] = s.split(".");
+      let zeros = 0;
+      for (let i = 0; i < frac.length; i++) {
+        if (frac[i] === "0") zeros++;
+        else break;
       }
-      if (abs < 1_000_000_000) {
-        return "$" + (abs / 1_000_000).toFixed(2) + "M";
-      }
-      if (abs < 1_000_000_000_000) {
-        return "$" + (abs / 1_000_000_000).toFixed(2) + "B";
-      }
-      return "$" + (abs / 1_000_000_000_000).toFixed(2) + "T";
+      const sig = frac.slice(zeros, zeros + 2).replace(/0+$/, "") || "0";
+      const sub = String(zeros)
+        .split("")
+        .map((d) => SUBSCRIPT_MAP[d] || d)
+        .join("");
+      return `$0.0${sub}${sig}`;
+    }
+
+    function formatUsd(value) {
+      // use tiny formatter for consistency
+      return formatTinyUsd(value);
     }
 
     function formatNumber(value) {
@@ -822,7 +825,7 @@
           {
             mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1",
             display: "USDC",
-            level: "low",
+            level: "medium",
           },
           {
             mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
@@ -933,8 +936,6 @@
           riskSummary,
           tokenMetrics,
           tokenAge,
-          dexInfo,
-          liquidityInfo,
         } = data;
 
         const canonicalMint = mint.trim();
@@ -968,7 +969,6 @@
         const symbol = tokenMeta?.symbol || "";
         const logo = tokenMeta?.logoURI || null;
 
-        // metrics
         const priceUsd = tokenMetrics?.priceUsd ?? null;
         const liquidityUsd = tokenMetrics?.liquidityUsd ?? null;
         const globalFeesUsd = tokenMetrics?.globalFeesUsd ?? null;
@@ -980,16 +980,19 @@
             ? Number(rawSupply) / Math.pow(10, decimals || 0)
             : null;
 
-        const holdersTop10 = holderSummary?.top10Pct ?? null;
+        const holdersTop10Pct =
+          typeof holderSummary?.top10Pct === "number"
+            ? holderSummary.top10Pct
+            : null;
         const holdersBarWidth =
-          holdersTop10 != null
-            ? Math.min(100, Math.max(0, holdersTop10))
+          holdersTop10Pct != null
+            ? Math.min(100, Math.max(0, holdersTop10Pct))
             : 0;
         const topHolders = holderSummary?.topHolders || [];
 
         const holdersLabel =
-          holdersTop10 != null
-            ? `${holdersTop10.toFixed(1)}% held by top 10 wallets`
+          holdersTop10Pct != null
+            ? `${holdersTop10Pct.toFixed(1)}% held by top 10 wallets (ex-LP)`
             : "No holder data";
 
         const renouncedMint = !mintAuthority;
@@ -1008,8 +1011,11 @@
               ${topHolders
                 .map((h, idx) => {
                   const rank = String(idx + 1).padStart(2, "0");
-                  return `<a class="holder-chip" href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener noreferrer">
-                      ${rank}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%
+                  const pct = typeof h.pct === "number" ? h.pct.toFixed(2) : "0.00";
+                  const lpDrip = h.isLiquidity ? " 💧" : "";
+                  const chipClass = "holder-chip" + (h.isLiquidity ? " holder-chip-lp" : "");
+                  return `<a class="${chipClass}" href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener noreferrer">
+                      ${rank}. ${shortAddr(h.address)} · ${pct}%${lpDrip}
                     </a>`;
                 })
                 .join("")}
@@ -1019,45 +1025,6 @@
              </div>`;
 
         const ageFmt = formatAge(tokenAge);
-
-        // Dex + LP info (placeholders until wired)
-        const lpLockedPct =
-          typeof liquidityInfo?.lockedPct === "number"
-            ? liquidityInfo.lockedPct
-            : null;
-
-        let lpLabel = "N/A (coming soon)";
-        let lpClass = "badge-warn";
-        if (lpLockedPct != null) {
-          lpLabel = `${lpLockedPct.toFixed(1)}% locked / burnt`;
-          if (lpLockedPct >= 70) lpClass = "badge-good";
-          else if (lpLockedPct >= 30) lpClass = "badge-warn";
-          else lpClass = "badge-bad";
-        }
-
-        const dexPaid = dexInfo?.paid;
-        let dexPaidLabel = "Unknown";
-        let dexPaidClass = "badge-warn";
-        if (dexPaid === true) {
-          dexPaidLabel = "Paid (profile claimed)";
-          dexPaidClass = "badge-good";
-        } else if (dexPaid === false) {
-          dexPaidLabel = "Unpaid (not claimed)";
-          dexPaidClass = "badge-bad";
-        }
-
-        const dexBoost = dexInfo?.boostUsd;
-        let dexBoostLabel = "Unknown";
-        let dexBoostClass = "badge-warn";
-        if (typeof dexBoost === "number") {
-          if (dexBoost > 0) {
-            dexBoostLabel = `Boosted: ${formatUsd(dexBoost)}`;
-            dexBoostClass = "badge-boost";
-          } else {
-            dexBoostLabel = "No boost";
-            dexBoostClass = "badge-bad";
-          }
-        }
 
         // Update recent tokens list
         const displayForRecent =
@@ -1088,7 +1055,11 @@
             <div style="min-width:0;">
               <div class="token-title-main">
                 <span>${name}</span>
-                ${symbol ? `<span class="token-symbol">(${symbol})</span>` : ""}
+                ${
+                  symbol
+                    ? `<span class="token-symbol">(${symbol})</span>`
+                    : ""
+                }
               </div>
               <div class="token-mint">${canonicalMint}</div>
             </div>
@@ -1150,38 +1121,30 @@
 
           <div class="result-sections">
             <div class="result-section">
-              <h3>TOKEN INFO</h3>
+              <h3>Token info</h3>
               <div class="result-row">
                 <span class="result-label">Mint authority</span>
                 <span class="badge ${
                   renouncedMint ? "badge-good" : "badge-bad"
-                }">
-                  ${
-                    renouncedMint
-                      ? "Renounced / Disabled"
-                      : "Active (can still mint)"
-                  }
-                </span>
+                }">${renouncedMint ? "Renounced / Disabled" : "Active (can still mint)"}</span>
               </div>
               <div class="result-row">
                 <span class="result-label">Freeze authority</span>
                 <span class="badge ${
                   canFreeze ? "badge-bad" : "badge-good"
-                }">
-                  ${canFreeze ? "Yes (can freeze tokens)" : "None"}
-                </span>
+                }">${canFreeze ? "Yes (can freeze tokens)" : "None"}</span>
               </div>
               <div class="result-row">
                 <span class="result-label">Liquidity pool</span>
-                <span class="badge ${lpClass}">${lpLabel}</span>
+                <span class="badge badge-warn">N/A (coming soon)</span>
               </div>
               <div class="result-row">
                 <span class="result-label">Dex paid</span>
-                <span class="badge ${dexPaidClass}">${dexPaidLabel}</span>
+                <span class="badge badge-warn">Unknown</span>
               </div>
               <div class="result-row">
                 <span class="result-label">Dex boost</span>
-                <span class="badge ${dexBoostClass}">${dexBoostLabel}</span>
+                <span class="badge badge-warn">Unknown</span>
               </div>
               <div class="result-small">
                 ${
@@ -1189,9 +1152,8 @@
                     ? "Dev can still print new tokens into their own wallets or LP."
                     : "No more supply can be minted from this mint authority."
                 }
-              </div>
-              <div class="result-small">
-                Liquidity lock, Dex paid & boost data will be wired in using Dexscreener / lockers.
+                <br />
+                Liquidity lock, Dex paid &amp; boost data will be wired in using Dexscreener / lockers.
               </div>
             </div>
 
@@ -1200,13 +1162,17 @@
               <div class="result-row">
                 <span class="result-label">Top 10 wallets</span>
                 <span class="badge ${
-                  holdersTop10 != null && holdersTop10 <= 25
+                  holdersTop10Pct != null && holdersTop10Pct <= 25
                     ? "badge-good"
-                    : holdersTop10 != null && holdersTop10 <= 60
+                    : holdersTop10Pct != null && holdersTop10Pct <= 60
                     ? "badge-warn"
                     : "badge-bad"
                 }">
-                  ${holdersTop10 != null ? `${holdersTop10.toFixed(1)}%` : "Unknown"}
+                  ${
+                    holdersTop10Pct != null
+                      ? `${holdersTop10Pct.toFixed(1)}%`
+                      : "Unknown"
+                  }
                 </span>
               </div>
               <div class="holders-bar">
@@ -1225,8 +1191,7 @@
               }
             </div>
             <div class="result-small">
-              Origin hints help you see whether this came from a known protocol (Pump, Bags,
-              Raydium, Moonshot, etc.) or a custom deployment.
+              Origin hints help you see whether this came from a known protocol (Pump, Bags, Raydium, Moonshot, etc) or a custom deployment.
             </div>
           </div>
 
