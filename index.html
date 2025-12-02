@@ -33,7 +33,7 @@
 
     .app {
       width: 100%;
-      max-width: 1180px;
+      max-width: 960px;
       margin: auto;
     }
 
@@ -49,7 +49,7 @@
       border-radius: 32px;
       padding: 24px 20px 20px;
       display: grid;
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.35fr);
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr);
       gap: 20px;
     }
 
@@ -178,33 +178,6 @@
       white-space: nowrap;
     }
 
-    .btn-ghost {
-      border-radius: 999px;
-      padding: 5px 10px;
-      font-size: 11px;
-      border: 1px solid rgba(148, 163, 184, 0.5);
-      background: rgba(15, 23, 42, 0.9);
-      color: var(--text-muted);
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-    }
-
-    .btn-jupiter {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .jup-icon {
-      width: 16px;
-      height: 16px;
-      border-radius: 999px;
-      background:
-        radial-gradient(circle at 25% 20%, #a5f3fc, #38bdf8 35%, #22c55e 65%, #0f172a 100%);
-    }
-
     .hint-row {
       display: flex;
       justify-content: space-between;
@@ -248,8 +221,7 @@
     .preset-risk-veryrisk { color: #ef4444; font-weight: 600; }
     .preset-risk-unknown { color: var(--text-muted); }
 
-    /* Right pane ----------------------------------------------------------- */
-
+    /* Right pane */
     .result-card {
       background: radial-gradient(circle at top left, #020617, #020617 60%, #020617);
       border-radius: 20px;
@@ -376,6 +348,7 @@
     .scam-score-fill {
       height: 100%;
       border-radius: inherit;
+      /* low -> high = red → green */
       background: linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e);
       transform-origin: left;
       transform: scaleX(0.5);
@@ -400,7 +373,6 @@
       border-radius: 12px;
       background: rgba(15, 23, 42, 0.95);
       border: 1px solid rgba(31, 41, 55, 0.9);
-      text-align: center; /* center label + value */
     }
 
     .metric-label {
@@ -441,6 +413,7 @@
       padding: 8px 9px;
       border: 1px dashed rgba(51, 65, 85, 0.9);
       background: rgba(15, 23, 42, 0.9);
+      margin-top: 4px;
     }
 
     .result-section h3 {
@@ -493,7 +466,6 @@
       background: rgba(234, 179, 8, 0.16);
     }
 
-    /* Holder list */
     .holders-bar {
       margin-top: 4px;
       height: 5px;
@@ -505,33 +477,6 @@
     .holders-bar-fill {
       height: 100%;
       background: linear-gradient(90deg, #22c55e, #eab308, #f97316, #ef4444);
-    }
-
-    .holders-list {
-      margin-top: 6px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      justify-content: center; /* center the pills */
-    }
-
-    .holder-chip {
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.45);
-      background: rgba(15, 23, 42, 0.95);
-      color: #e5e7ff;
-      text-decoration: none;
-    }
-
-    .holder-chip-lp {
-      border-color: rgba(56, 189, 248, 0.9);
-      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
-    }
-
-    .holder-chip:hover {
-      border-color: var(--accent);
     }
 
     .result-small {
@@ -546,6 +491,29 @@
       color: var(--text-muted);
     }
 
+    /* Holders list */
+    .holders-list {
+      margin-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .holder-chip {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      background: rgba(15, 23, 42, 0.95);
+      color: #e5e7ff;
+      text-decoration: none;
+    }
+
+    .holder-chip:hover {
+      border-color: var(--accent);
+    }
+
+    /* Tools row */
     .tools-row {
       margin-top: 6px;
       display: flex;
@@ -567,6 +535,8 @@
       cursor: pointer;
     }
 
+    .tool-btn span { font-size: 11px; }
+
     .tool-btn:hover {
       border-color: var(--accent);
       box-shadow: 0 0 0 1px rgba(22, 242, 154, 0.32);
@@ -586,8 +556,19 @@
       flex-wrap: wrap;
     }
 
-    .actions-right {
-      margin-left: auto;
+    .actions-right { margin-left: auto; }
+
+    .btn-ghost {
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 11px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
     }
 
     .error-box {
@@ -621,7 +602,7 @@
   <div class="app">
     <div class="shell">
       <div class="inner">
-        <!-- LEFT / INPUT --------------------------------------------------- -->
+        <!-- LEFT / INPUT -->
         <div>
           <div class="hero-pill">
             <span>🟢 GlassBox v0.1</span>
@@ -656,7 +637,9 @@
                 <span>💡</span>
                 <span>We never see or store your wallet or keys.</span>
               </div>
-              <div class="preset-row" id="recentRow"></div>
+              <div class="preset-row" id="recentRow">
+                <!-- recent tokens rendered by JS -->
+              </div>
             </div>
           </div>
 
@@ -666,14 +649,14 @@
           </footer>
         </div>
 
-        <!-- RIGHT / RESULT ------------------------------------------------- -->
+        <!-- RIGHT / RESULT -->
         <div>
-          <div class="result-card">
+          <div class="result-card" id="resultCard">
             <div id="resultBox" style="font-size:12px;color:var(--text-muted);">
               Paste a Solana token mint on the left and hit <strong>Scan</strong> to see:
               <ul style="padding-left:18px;margin:6px 0 2px;">
                 <li>Mint &amp; freeze authority status</li>
-                <li>Holder concentration risk + top wallets (ex-LP)</li>
+                <li>Holder concentration risk + top wallets</li>
                 <li>Protocol origin hints</li>
                 <li>Readable supply, price, liquidity &amp; token age</li>
               </ul>
@@ -686,6 +669,7 @@
     </div>
   </div>
 
+  <!-- SCRIPT -->
   <script>
     const API_BASE = "/api/check";
     const RECENT_KEY = "glassbox_recent_mints_v1";
@@ -710,49 +694,114 @@
       }
     }
 
-    const SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+    // ---------- PRICE FORMATTING (with 0.0₆57 style) ----------
 
-    function formatTinyPrice(n) {
-      // n is a positive number < 0.0001
-      const s = n.toFixed(12);         // "0.000000570000"
-      const frac = s.slice(2);        // "000000570000"
-      const firstNonZero = frac.search(/[1-9]/);
-      if (firstNonZero === -1) return "$0.0…";
+    const SUBSCRIPT_MAP = {
+      "0": "₀",
+      "1": "₁",
+      "2": "₂",
+      "3": "₃",
+      "4": "₄",
+      "5": "₅",
+      "6": "₆",
+      "7": "₇",
+      "8": "₈",
+      "9": "₉",
+    };
 
-      const zeroCount = firstNonZero; // how many leading zeros
-      const rest = frac.slice(firstNonZero, firstNonZero + 3).replace(/0+$/,"");
-
-      const zerosSup = zeroCount
-        .toString()
+    function toSubscript(num) {
+      return String(num)
         .split("")
-        .map(d => SUPERSCRIPT_DIGITS[d])
+        .map((d) => SUBSCRIPT_MAP[d] || d)
         .join("");
+    }
 
-      return `$0.0${zerosSup}${rest}`;
+    // For super tiny prices like 0.00000057 → "$0.0₆57"
+    function formatTinyUsd(n) {
+      if (!isFinite(n) || n <= 0) return "$0";
+
+      const s = n.toFixed(12);
+      const parts = s.split(".");
+      const dec = (parts[1] || "").replace(/0+$/, "");
+
+      if (!dec) return "$0";
+
+      let zeroCount = 0;
+      let digits = "";
+      for (const ch of dec) {
+        if (ch === "0" && digits === "") {
+          zeroCount++;
+        } else {
+          digits += ch;
+        }
+      }
+      if (!digits) return "$0";
+
+      const sub = toSubscript(zeroCount);
+      return `$0.0${sub}${digits}`;
     }
 
     function formatUsd(value) {
-      if (value === null || value === undefined) return "N/A";
+      if (value === null || value === undefined || isNaN(value)) return "N/A";
       const n = Number(value);
-      if (!isFinite(n)) return "N/A";
-      if (n === 0) return "$0";
+      if (!isFinite(n) || n <= 0) return "$0";
 
       if (n < 0.0001) {
-        return formatTinyPrice(n);
+        return formatTinyUsd(n);
       }
-      if (n < 1) return "$" + n.toFixed(4);
-      if (n < 1000) return "$" + n.toFixed(2);
+
+      if (n < 1) {
+        return (
+          "$" +
+          n
+            .toFixed(6)
+            .replace(/0+$/, "")
+            .replace(/\.$/, "")
+        );
+      }
+      if (n < 1000) {
+        return (
+          "$" +
+          n
+            .toFixed(4)
+            .replace(/0+$/, "")
+            .replace(/\.$/, "")
+        );
+      }
       if (n < 1_000_000) {
         return "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
       }
       if (n < 1_000_000_000) {
-        return "$" + (n / 1_000_000).toFixed(2) + "M";
+        return (
+          "$" +
+          (n / 1_000_000)
+            .toFixed(2)
+            .replace(/0+$/, "")
+            .replace(/\.$/, "") +
+          "M"
+        );
       }
       if (n < 1_000_000_000_000) {
-        return "$" + (n / 1_000_000_000).toFixed(2) + "B";
+        return (
+          "$" +
+          (n / 1_000_000_000)
+            .toFixed(2)
+            .replace(/0+$/, "")
+            .replace(/\.$/, "") +
+          "B"
+        );
       }
-      return "$" + (n / 1_000_000_000_000).toFixed(2) + "T";
+      return (
+        "$" +
+        (n / 1_000_000_000_000)
+          .toFixed(2)
+          .replace(/0+$/, "")
+          .replace(/\.$/, "") +
+        "T"
+      );
     }
+
+    // ---------- OTHER HELPERS ----------
 
     function formatNumber(value) {
       if (value == null || isNaN(value)) return "—";
@@ -776,7 +825,8 @@
 
     function renderError(message) {
       errorBox.style.display = "block";
-      errorBox.textContent = message || "Something went wrong while checking this mint.";
+      errorBox.textContent =
+        message || "Something went wrong while checking this mint.";
       resultBox.innerHTML = "";
     }
 
@@ -823,7 +873,7 @@
           {
             mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1",
             display: "USDC",
-            level: "medium",
+            level: "low",
           },
           {
             mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
@@ -833,21 +883,25 @@
         ];
         recentRow.innerHTML = defaults
           .map(
-            (r) =>
-              `<button class="preset-btn" data-mint="${r.mint}">
-                 ${r.display}
-                 <span class="${presetRiskClass(r.level)}">· ${labelForRisk(r.level)}</span>
-               </button>`
+            (r) => `
+              <button class="preset-btn" data-mint="${r.mint}">
+                ${r.display}
+                <span class="${presetRiskClass(r.level)}">· ${labelForRisk(
+                  r.level
+                )}</span>
+              </button>`
           )
           .join("");
       } else {
         recentRow.innerHTML = recent
           .map(
-            (r) =>
-              `<button class="preset-btn" data-mint="${r.mint}">
-                 ${r.display}
-                 <span class="${presetRiskClass(r.level)}">· ${labelForRisk(r.level)}</span>
-               </button>`
+            (r) => `
+              <button class="preset-btn" data-mint="${r.mint}">
+                ${r.display}
+                <span class="${presetRiskClass(r.level)}">· ${labelForRisk(
+                  r.level
+                )}</span>
+              </button>`
           )
           .join("");
       }
@@ -882,7 +936,8 @@
         return { main: `${hours}h`, sub: "since mint" };
       }
       if (days < 30) {
-        return { main: `${Math.floor(days)}d`, sub: "since mint" };
+        const d = Math.floor(days);
+        return { main: `${d}d`, sub: "since mint" };
       }
       if (days < 365) {
         const months = (days / 30).toFixed(1);
@@ -891,6 +946,8 @@
       const years = (days / 365).toFixed(1);
       return { main: `${years}y`, sub: `≈ ${Math.floor(days)} days` };
     }
+
+    // ---------- MAIN SCAN HANDLER ----------
 
     async function handleCheck() {
       const mint = (mintInput.value || "").trim();
@@ -904,8 +961,9 @@
       setLoading(true);
 
       try {
-        const res = await fetch(`${API_BASE}?mint=${encodeURIComponent(mint)}`);
+        const res = await fetch(API_BASE + "?mint=" + encodeURIComponent(mint));
         const data = await res.json();
+
         if (!res.ok) {
           throw new Error(data?.error || "Backend error");
         }
@@ -930,7 +988,6 @@
         const riskLevel = riskSummary?.level || "unknown";
         let riskClass = "risk-med";
         let riskLabel = "Unknown risk";
-
         if (riskLevel === "low") {
           riskClass = "risk-low";
           riskLabel = "Low rug risk (mint side)";
@@ -943,25 +1000,20 @@
         }
 
         let scamScore = Number(riskSummary?.score);
-        if (!isFinite(scamScore)) {
-          scamScore =
-            riskLevel === "low"
-              ? 85
-              : riskLevel === "medium"
-              ? 55
-              : riskLevel === "high"
-              ? 25
-              : 50;
+        if (isNaN(scamScore) || scamScore < 0 || scamScore > 100) {
+          if (riskLevel === "low") scamScore = 85;
+          else if (riskLevel === "medium") scamScore = 55;
+          else if (riskLevel === "high") scamScore = 20;
+          else scamScore = 50;
         }
-        scamScore = Math.min(100, Math.max(0, scamScore));
 
         const name = tokenMeta?.name || "Unknown Token";
         const symbol = tokenMeta?.symbol || "";
         const logo = tokenMeta?.logoURI || null;
 
         const priceUsd = tokenMetrics?.priceUsd ?? null;
-        const liqUsd = tokenMetrics?.liquidityUsd ?? null;
-        const feesUsd = tokenMetrics?.globalFeesUsd ?? null;
+        const liquidityUsd = tokenMetrics?.liquidityUsd ?? null;
+        const globalFeesUsd = tokenMetrics?.globalFeesUsd ?? null;
 
         const rawSupply = mintInfo?.supply;
         const decimals = mintInfo?.decimals ?? 0;
@@ -970,24 +1022,17 @@
             ? Number(rawSupply) / Math.pow(10, decimals || 0)
             : null;
 
-        const holdersTop10 =
-          typeof holderSummary?.top10Pct === "number"
-            ? holderSummary.top10Pct
-            : null;
+        const holdersTop10 = holderSummary?.top10Pct ?? null;
         const holdersBarWidth =
           holdersTop10 != null
             ? Math.min(100, Math.max(0, holdersTop10))
             : 0;
-
-        const topHoldersRaw = holderSummary?.topHolders || [];
-        const topHolders = topHoldersRaw.slice(0, 10); // show only top 10
+        const topHolders = holderSummary?.topHolders || [];
 
         const holdersLabel =
           holdersTop10 != null
-            ? `${holdersTop10.toFixed(
-                1
-              )}% held by top 10 wallets (excluding LP vault).`
-            : "Holder list not available for this mint yet.";
+            ? `${holdersTop10.toFixed(1)}% held by top 10 wallets`
+            : "No holder data";
 
         const renouncedMint = !mintAuthority;
         const canMintMore = !!mintAuthority;
@@ -995,11 +1040,28 @@
 
         const originText = originHint?.label || "Unknown protocol / origin";
         const originDetail = originHint?.detail || "";
+
         const riskBlurb = riskSummary?.blurb || "";
+        const scamScoreClamped = Math.min(100, Math.max(0, scamScore));
+        const scamScoreScale = scamScoreClamped / 100;
+
+        const holdersListHtml = topHolders.length
+          ? `<div class="holders-list">
+              ${topHolders
+                .map((h, idx) => {
+                  const rank = String(idx + 1).padStart(2, "0");
+                  return `<a class="holder-chip" href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener noreferrer">
+                      ${rank}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%
+                    </a>`;
+                })
+                .join("")}
+            </div>`
+          : `<div class="result-small" style="margin-top:4px;">
+              Holder list not available for this mint yet.
+            </div>`;
 
         const ageFmt = formatAge(tokenAge);
 
-        // Update recent list
         const displayForRecent =
           symbol || name || shortAddr(canonicalMint) || "Token";
         addRecent({
@@ -1007,25 +1069,6 @@
           display: displayForRecent,
           level: riskLevel,
         });
-
-        const scamScoreScale = scamScore / 100;
-
-        const holdersListHtml = topHolders.length
-          ? `<div class="holders-list">
-              ${topHolders
-                .map((h, idx) => {
-                  const rank = String(idx + 1).padStart(2, "0");
-                  const drip = h.isLp ? " 💧" : "";
-                  const lpClass = h.isLp ? " holder-chip-lp" : "";
-                  return `<a class="holder-chip${lpClass}" href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener noreferrer">
-                      ${rank}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%${drip}
-                    </a>`;
-                })
-                .join("")}
-             </div>`
-          : `<div class="result-small" style="margin-top:4px;">
-               Holder list not available for this mint yet.
-             </div>`;
 
         resultBox.innerHTML = `
           <div class="result-header-line">
@@ -1041,7 +1084,9 @@
           <div class="token-title-row">
             <div class="token-logo" style="${
               logo
-                ? `background-image:url('${logo.replace(/'/g, "\\'")}');`
+                ? "background-image:url('" +
+                  logo.replace(/'/g, "\\'") +
+                  "');"
                 : "background: radial-gradient(circle at 30% 10%, #4ade80, #16a34a);"
             }"></div>
             <div style="min-width:0;">
@@ -1064,7 +1109,9 @@
           <div class="scam-score-wrap">
             <div class="scam-score-header">
               <span>GlassBox scam score (0–100)</span>
-              <span class="scam-score-value">${scamScore.toFixed(0)}/100</span>
+              <span class="scam-score-value">${scamScoreClamped.toFixed(
+                0
+              )}/100</span>
             </div>
             <div class="scam-score-bar">
               <div class="scam-score-fill" style="transform:scaleX(${scamScoreScale});"></div>
@@ -1078,20 +1125,20 @@
             </div>
             <div class="metric-pill">
               <div class="metric-label">Liquidity</div>
-              <div class="metric-value">${formatUsd(liqUsd)}</div>
+              <div class="metric-value">${formatUsd(liquidityUsd)}</div>
             </div>
             <div class="metric-pill">
-              <div class="metric-label">Total supply</div>
+              <div class="metric-label">Total Supply</div>
               <div class="metric-value">${
                 supplyHuman != null ? formatNumber(supplyHuman) : "—"
               }</div>
             </div>
             <div class="metric-pill">
-              <div class="metric-label">Global fees paid</div>
-              <div class="metric-value">${formatUsd(feesUsd)}</div>
+              <div class="metric-label">Global Fees Paid</div>
+              <div class="metric-value">${formatUsd(globalFeesUsd)}</div>
             </div>
             <div class="metric-pill">
-              <div class="metric-label">Token age</div>
+              <div class="metric-label">Token Age</div>
               <div class="metric-value">${ageFmt.main}</div>
               ${
                 ageFmt.sub
@@ -1103,24 +1150,148 @@
 
           <div class="result-sections">
             <div class="result-section">
-              <h3>Token info</h3>
+              <h3>Mint &amp; freeze controls</h3>
               <div class="result-row">
                 <span class="result-label">Mint authority</span>
                 <span class="badge ${
                   renouncedMint ? "badge-good" : "badge-bad"
-                }">${renouncedMint ? "Renounced / Disabled" : "Active (can still mint)"}</span>
+                }">
+                  ${renouncedMint ? "Renounced / Disabled" : "Can still mint"}
+                </span>
               </div>
               <div class="result-row">
                 <span class="result-label">Freeze authority</span>
+                <span class="badge ${canFreeze ? "badge-bad" : "badge-good"}">
+                  ${canFreeze ? "Can freeze tokens" : "None"}
+                </span>
+              </div>
+              <div class="result-small">
+                ${
+                  canMintMore
+                    ? "Dev can still print new tokens into their own wallets or LP."
+                    : "No more supply can be minted from this mint authority."
+                }
+              </div>
+            </div>
+
+            <div class="result-section">
+              <h3>Holder risk</h3>
+              <div class="result-row">
+                <span class="result-label">Top 10 wallets</span>
                 <span class="badge ${
-                  canFreeze ? "badge-bad" : "badge-good"
-                }">${canFreeze ? "Yes (can freeze tokens)" : "None"}</span>
+                  holdersTop10 != null && holdersTop10 <= 25
+                    ? "badge-good"
+                    : holdersTop10 != null && holdersTop10 <= 60
+                    ? "badge-warn"
+                    : "badge-bad"
+                }">
+                  ${
+                    holdersTop10 != null
+                      ? `${holdersTop10.toFixed(1)}%`
+                      : "Unknown"
+                  }
+                </span>
               </div>
-              <div class="result-row">
-                <span class="result-label">Liquidity pool</span>
-                <span class="badge badge-warn">N/A (coming soon)</span>
+              <div class="holders-bar">
+                <div class="holders-bar-fill" style="width:${holdersBarWidth}%;"></div>
               </div>
-              <div class="result-row">
-                <span class="result-label">Dex paid</span>
-                <span class="badge badge-warn">Unknown</span>
-              </div
+              <div class="result-small">${holdersLabel}</div>
+              ${holdersListHtml}
+            </div>
+          </div>
+
+          <div class="result-section">
+            <h3>Origin signal</h3>
+            <div class="origin-row">
+              <strong>${originText}</strong>${
+          originDetail ? ` · ${originDetail}` : ""
+        }
+            </div>
+            <div class="result-small">
+              Origin hints help you see whether this came from a known protocol (Pump, Bags,
+              Raydium, Moonshot, etc.) or a custom deployment.
+            </div>
+          </div>
+
+          <div class="result-section">
+            <h3>Tools</h3>
+            <div class="tools-row">
+              <a class="tool-btn" href="${dexscreenerUrl}" target="_blank" rel="noopener noreferrer">
+                <span>📊 DexScreener</span>
+              </a>
+              <a class="tool-btn" href="https://axiom.trade/@dudexyz" target="_blank" rel="noopener noreferrer">
+                <span>📈 Axiom</span>
+              </a>
+              <a class="tool-btn" href="https://t.me/BullxBetaBot?start=access_N3OJF4TE16J" target="_blank" rel="noopener noreferrer">
+                <span>🐂 BullX Bot</span>
+              </a>
+              <a class="tool-btn" href="https://trade.padre.gg/rk/dudexyz" target="_blank" rel="noopener noreferrer">
+                <span>🧠 Padre</span>
+              </a>
+              <a class="tool-btn" href="https://photon-sol.tinyastro.io/@xyzthegod" target="_blank" rel="noopener noreferrer">
+                <span>⚡ Photon</span>
+              </a>
+              <a class="tool-btn" href="https://stalk.fun/?r=ZATEZOJI" target="_blank" rel="noopener noreferrer">
+                <span>👁️ StalkFun</span>
+              </a>
+            </div>
+            <div class="result-small">
+              These are your referral links. Using them supports GlassBox at no extra cost to the user.
+            </div>
+            <div class="result-small" style="margin-top:4px;text-align:right;font-size:10px;">
+              <span style="opacity:0.85;">GlassBox Pro (degen alerts &amp; MEV shield) coming soon.</span>
+            </div>
+          </div>
+
+          <div class="actions-row">
+            <div class="actions-left">
+              <a
+                class="btn-secondary"
+                href="${jupUrl}"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                🔄 Swap on Jupiter
+              </a>
+            </div>
+            <div class="actions-right">
+              <button class="btn-ghost" id="copyMintBtn">
+                📋 Copy mint
+              </button>
+            </div>
+          </div>
+        `;
+
+        const copyBtn = document.getElementById("copyMintBtn");
+        if (copyBtn) {
+          copyBtn.onclick = async () => {
+            try {
+              await navigator.clipboard.writeText(canonicalMint);
+              copyBtn.textContent = "✅ Copied";
+              setTimeout(() => {
+                copyBtn.textContent = "📋 Copy mint";
+              }, 1200);
+            } catch (e) {
+              console.error(e);
+            }
+          };
+        }
+      } catch (err) {
+        console.error(err);
+        renderError(err.message || "Failed to scan this mint.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    checkBtn.addEventListener("click", handleCheck);
+    mintInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        handleCheck();
+      }
+    });
+
+    renderRecentRow();
+  </script>
+</body>
+</html>
