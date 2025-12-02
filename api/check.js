@@ -1,11 +1,15 @@
-// /api/check.js
-// Vercel serverless function.
-// Uses Helius RPC for mint + holders, Dexscreener for price/liquidity/age.
+// api/check.js
+// Serverless function for Vercel
+// Uses Helius RPC to fetch mint info + metadata + top holders.
+// Also hits DexScreener for price / liquidity.
+
+// --- CONFIG ----------------------------------------------------
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-// ---- Generic RPC helper ----
+// --- HELPER: generic RPC caller -------------------------------
+
 async function rpc(method, params) {
   const res = await fetch(RPC_URL, {
     method: "POST",
@@ -28,27 +32,19 @@ async function rpc(method, params) {
   return json.result;
 }
 
-// Safe wrapper: if it fails, return null instead of throwing
-async function rpcSafe(method, params) {
-  try {
-    return await rpc(method, params);
-  } catch (e) {
-    console.warn(`RPC ${method} failed:`, e.message);
-    return null;
-  }
-}
+// --- HELPER: parse SPL mint account ---------------------------
+// We only decode what we need: supply, decimals, mint/freeze flags.
 
-// ---- Mint account decoding (supply, decimals, authorities) ----
 function parseMintAccount(base64Data) {
   const raw = Buffer.from(base64Data, "base64");
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
 
   let offset = 0;
 
-  // u32: mintAuthorityOption
+  // u32 option: mintAuthority
   const mintAuthOpt = view.getUint32(offset, true);
   const hasMintAuthority = mintAuthOpt !== 0;
-  offset += 4 + 32; // skip option + pubkey bytes
+  offset += 4 + 32; // skip option + pubkey
 
   // u64: supply (little endian)
   const low = view.getUint32(offset, true);
@@ -60,72 +56,101 @@ function parseMintAccount(base64Data) {
   const decimals = raw[offset];
   offset += 1;
 
-  // u8: isInitialized (unused here)
+  // u8: isInitialized (ignored)
   offset += 1;
 
-  // u32: freezeAuthorityOption
+  // u32 option: freezeAuthority
   const freezeOpt = view.getUint32(offset, true);
   const hasFreezeAuthority = freezeOpt !== 0;
 
   return {
-    supply: supplyBig.toString(),
+    supply: supplyBig.toString(), // string
     decimals,
     hasMintAuthority,
     hasFreezeAuthority,
   };
 }
 
-// ---- Dexscreener helper (price/liquidity/age) ----
-async function fetchDexscreenerData(mint) {
+// --- HELPER: tiny address formatter ---------------------------
+
+function shortAddr(addr) {
+  if (!addr || addr.length <= 8) return addr;
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
+}
+
+// --- HELPER: DexScreener price / liquidity --------------------
+
+async function fetchDexScreener(mint) {
   try {
     const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
     const res = await fetch(url);
-    if (!res.ok) {
-      console.warn("Dexscreener HTTP error:", res.status, res.statusText);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json || !Array.isArray(json.pairs) || !json.pairs.length) {
       return null;
     }
-    const json = await res.json();
-    const pairs = json?.pairs || [];
-    if (!pairs.length) return null;
+    // For now just take the first pair. Later you can add smarter selection.
+    const pair = json.pairs[0];
 
-    // Take the pair with the highest liquidity
-    const pair = pairs.reduce((best, p) => {
-      const bestLiq = best?.liquidity?.usd ?? 0;
-      const liq = p?.liquidity?.usd ?? 0;
-      return liq > bestLiq ? p : best;
-    }, null);
-
-    if (!pair) return null;
-
-    const priceUsd = pair.priceUsd != null ? Number(pair.priceUsd) : null;
+    const priceUsd =
+      pair && pair.priceUsd != null ? Number(pair.priceUsd) : null;
     const liquidityUsd =
-      pair.liquidity && pair.liquidity.usd != null
+      pair && pair.liquidity && pair.liquidity.usd != null
         ? Number(pair.liquidity.usd)
         : null;
 
-    let ageDays = null;
-    if (pair.pairCreatedAt) {
-      const created = Number(pair.pairCreatedAt);
-      if (created > 0) {
-        const nowMs = Date.now();
-        ageDays = (nowMs - created) / (1000 * 60 * 60 * 24);
-      }
-    }
+    // DexScreener doesn’t really expose “global fees paid” directly;
+    // keep this as null so frontend shows N/A.
+    const globalFeesUsd = null;
 
-    return {
-      priceUsd,
-      liquidityUsd,
-      globalFeesUsd: null, // placeholder
-      ageDays,
-      // Dex paid / boost are not exposed in their free API yet.
-      dexPaid: null,
-      dexBoostUsd: null,
-    };
+    return { priceUsd, liquidityUsd, globalFeesUsd };
   } catch (e) {
-    console.warn("Dexscreener fetch failed:", e.message);
+    console.error("DexScreener fetch error:", e);
     return null;
   }
 }
+
+// --- HELPER: extract a reasonable creation timestamp ----------
+
+function getCreationTimestampMs(asset) {
+  if (!asset) return null;
+
+  // Helius assets can have different shapes; try a few common fields.
+  const cand =
+    asset.creationTime ??
+    asset.createdAt ??
+    asset.timeCreated ??
+    asset.timestamp ??
+    null;
+
+  if (!cand) return null;
+
+  if (typeof cand === "string") {
+    const t = Date.parse(cand);
+    return Number.isFinite(t) ? t : null;
+  }
+
+  if (typeof cand === "number") {
+    // If it's already in ms, keep it; if it looks like seconds, convert.
+    if (cand > 1e12) return cand;
+    return cand * 1000;
+  }
+
+  return null;
+}
+
+function buildTokenAge(asset) {
+  const createdMs = getCreationTimestampMs(asset);
+  if (!createdMs) return null;
+
+  const now = Date.now();
+  const ageDays = (now - createdMs) / (1000 * 60 * 60 * 24);
+  if (!Number.isFinite(ageDays) || ageDays < 0) return null;
+
+  return { ageDays };
+}
+
+// --- MAIN HANDLER ---------------------------------------------
 
 export default async function handler(req, res) {
   try {
@@ -145,11 +170,20 @@ export default async function handler(req, res) {
         .json({ error: "HELIUS_API_KEY is not set in environment" });
     }
 
-    // 1) Fetch mint account info + largest token accounts (safe)
-    const [accountInfo, largest, dexData] = await Promise.all([
-      rpc("getAccountInfo", [mint, { encoding: "base64" }]),
-      rpcSafe("getTokenLargestAccounts", [mint]),
-      fetchDexscreenerData(mint),
+    // 1) RPC calls in parallel
+    const accountInfoPromise = rpc("getAccountInfo", [
+      mint,
+      { encoding: "base64" },
+    ]);
+    const assetPromise = rpc("getAsset", [mint]);
+    const largestPromise = rpc("getTokenLargestAccounts", [mint]);
+    const dexPromise = fetchDexScreener(mint);
+
+    const [accountInfo, asset, largest, dexMetrics] = await Promise.all([
+      accountInfoPromise,
+      assetPromise,
+      largestPromise,
+      dexPromise,
     ]);
 
     if (!accountInfo?.value) {
@@ -158,46 +192,52 @@ export default async function handler(req, res) {
         .json({ error: "Not a valid SPL mint account on Solana." });
     }
 
+    // --- Mint parsing -----------------------------------------
+
     const dataBase64 = accountInfo.value.data?.[0];
     const parsedMint = parseMintAccount(dataBase64);
 
     const mintInfo = {
-      supply: parsedMint.supply, // string
+      supply: parsedMint.supply, // raw string
       decimals: parsedMint.decimals,
     };
 
     const mintAuthority = parsedMint.hasMintAuthority;
     const freezeAuthority = parsedMint.hasFreezeAuthority;
 
-    // 2) Token metadata from Helius getAsset (safe, may not exist for big tokens like USDC)
-    let tokenMeta = {
-      name: "Unknown Token",
-      symbol: "",
-      logoURI: null,
-    };
+    // --- Metadata from Helius asset ---------------------------
+
+    let name = "Unknown Token";
+    let symbol = "";
+    let logoURI = null;
 
     try {
-      const asset = await rpcSafe("getAsset", [mint]);
       if (asset?.content?.metadata) {
-        tokenMeta.name = asset.content.metadata.name || tokenMeta.name;
-        tokenMeta.symbol = asset.content.metadata.symbol || tokenMeta.symbol;
+        name = asset.content.metadata.name || name;
+        symbol = asset.content.metadata.symbol || symbol;
       }
       if (asset?.content?.links?.image) {
-        tokenMeta.logoURI = asset.content.links.image;
+        logoURI = asset.content.links.image;
       }
     } catch (e) {
-      console.warn("getAsset failed:", e.message);
+      // ignore metadata failures
     }
 
-    // 3) Holder summary (top 10)
+    const tokenMeta = { name, symbol, logoURI };
+
+    // --- Holder / LP logic ------------------------------------
+
     const largestAccounts = largest?.value || [];
-    const totalHolders = largestAccounts.length;
 
-    const supplyBN = BigInt(parsedMint.supply || "0") || 1n;
+    const supplyBN =
+      BigInt(parsedMint.supply || "0") === 0n
+        ? 1n
+        : BigInt(parsedMint.supply || "0");
 
-    const topHolders = largestAccounts.slice(0, 10).map((entry) => {
+    // First, compute pct for each holder.
+    const rawHolders = largestAccounts.map((entry) => {
       const amountBN = BigInt(entry.amount || "0");
-      const pct = Number((amountBN * 10_000n) / supplyBN) / 100; // %
+      const pct = Number((amountBN * 10_000n) / supplyBN) / 100; // 2 decimal %
       return {
         address: entry.address,
         pct,
@@ -205,15 +245,38 @@ export default async function handler(req, res) {
       };
     });
 
-    const top10Pct = topHolders.reduce((sum, h) => sum + (h.pct || 0), 0);
+    // Heuristic liquidity-pool detection:
+    // if the biggest account holds >= 40% of supply, treat it as LP.
+    let liquidityIndex = -1;
+    let liquidityPct = null;
+    if (rawHolders.length > 0 && rawHolders[0].pct >= 40) {
+      liquidityIndex = 0;
+      liquidityPct = rawHolders[0].pct;
+    }
+
+    const topHolders = rawHolders.map((h, idx) => ({
+      ...h,
+      isLiquidity: idx === liquidityIndex,
+    }));
+
+    // Effective "top 10" = top 10 *non-liquidity* wallets.
+    const effectiveTop10 = topHolders
+      .filter((h) => !h.isLiquidity)
+      .slice(0, 10);
+    const top10Pct = effectiveTop10.reduce(
+      (sum, h) => sum + (h.pct || 0),
+      0
+    );
 
     const holderSummary = {
-      totalHolders,
-      top10Pct,
+      top10Pct, // % held by top 10 non-LP wallets
+      liquidityPct, // % in the LP, if detected
+      liquidityIndex,
       topHolders,
     };
 
-    // 4) Simple origin hint
+    // --- Origin hint ------------------------------------------
+
     let originLabel = "Unknown protocol / origin";
     let originDetail = "";
     const lowerMint = mint.toLowerCase();
@@ -229,7 +292,8 @@ export default async function handler(req, res) {
       detail: originDetail,
     };
 
-    // 5) Simple risk model
+    // --- Risk model (very simple) -----------------------------
+
     let level = "medium";
     let blurb = "";
     let score = 50;
@@ -253,25 +317,19 @@ export default async function handler(req, res) {
 
     const riskSummary = { level, blurb, score };
 
-    // 6) Token metrics + age from Dexscreener (if available)
+    // --- Token metrics (DexScreener) --------------------------
+
     const tokenMetrics = {
-      priceUsd: dexData?.priceUsd ?? null,
-      liquidityUsd: dexData?.liquidityUsd ?? null,
-      globalFeesUsd: dexData?.globalFeesUsd ?? null,
+      priceUsd: dexMetrics?.priceUsd ?? null,
+      liquidityUsd: dexMetrics?.liquidityUsd ?? null,
+      globalFeesUsd: dexMetrics?.globalFeesUsd ?? null,
     };
 
-    const tokenAge = dexData?.ageDays != null ? { ageDays: dexData.ageDays } : null;
+    // --- Token age --------------------------------------------
 
-    // 7) Dex profile info (placeholders for now)
-    const dexInfo = {
-      paid: dexData?.dexPaid ?? null,
-      boostUsd: dexData?.dexBoostUsd ?? null,
-    };
+    const tokenAge = buildTokenAge(asset);
 
-    // 8) Liquidity lock info (placeholder – needs lockers integration)
-    const liquidityInfo = {
-      lockedPct: null, // when wired: % of supply locked/burnt
-    };
+    // --- Response ---------------------------------------------
 
     return res.status(200).json({
       tokenMeta,
@@ -283,11 +341,11 @@ export default async function handler(req, res) {
       riskSummary,
       tokenMetrics,
       tokenAge,
-      dexInfo,
-      liquidityInfo,
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: err.message || "Internal error" });
+    return res
+      .status(500)
+      .json({ error: err.message || "Internal server error" });
   }
 }
