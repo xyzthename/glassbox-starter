@@ -889,6 +889,8 @@
           riskSummary,
           tokenMetrics,
           tokenAge,
+          lockInfo,
+          dexInfo,
         } = data;
 
         const canonicalMint = mint.trim();
@@ -933,6 +935,43 @@
           rawSupply != null
             ? Number(rawSupply) / Math.pow(10, decimals || 0)
             : null;
+
+        // locked / burned info (comes from backend later; placeholders for now)
+        const lockedPct = lockInfo?.lockedPct ?? null;
+        const burnedPct = lockInfo?.burnedPct ?? null;
+        const hasLockData = lockedPct != null || burnedPct != null;
+        const totalLockedBurned =
+          (lockedPct != null ? lockedPct : 0) +
+          (burnedPct != null ? burnedPct : 0);
+
+        let lockedLabel;
+        let lockedBadgeClass = "badge-warn";
+
+        if (!hasLockData) {
+          lockedLabel = "N/A (indexer soon)";
+        } else {
+          lockedLabel = `${totalLockedBurned.toFixed(1)}% locked / burned`;
+          lockedBadgeClass =
+            totalLockedBurned >= 80 ? "badge-good" : "badge-warn";
+        }
+
+        // dex paid / boost info (from Dexscreener/API later)
+        const dexPaid = dexInfo?.dexPaid ?? null;
+        const dexBoost = dexInfo?.boostLabel ?? null;
+
+        let dexLabel = "N/A (Dexscreener soon)";
+        let dexBadgeClass = "badge-warn";
+
+        if (dexPaid === true && dexBoost) {
+          dexLabel = `Paid · Boost ${dexBoost}`;
+          dexBadgeClass = "badge-good";
+        } else if (dexPaid === true) {
+          dexLabel = "Paid listing";
+          dexBadgeClass = "badge-good";
+        } else if (dexPaid === false) {
+          dexLabel = "No paid listing detected";
+          dexBadgeClass = "badge-bad";
+        }
 
         const holdersTop10 = holderSummary?.top10Pct ?? null;
         const holdersBarWidth =
@@ -1077,6 +1116,14 @@
                 <span class="badge ${
                   canFreeze ? "badge-bad" : "badge-good"
                 }">${canFreeze ? "Can freeze tokens" : "None"}</span>
+              </div>
+              <div class="result-row">
+                <span class="result-label">Locked / burned</span>
+                <span class="badge ${lockedBadgeClass}">${lockedLabel}</span>
+              </div>
+              <div class="result-row">
+                <span class="result-label">DEX paid / boost</span>
+                <span class="badge ${dexBadgeClass}">${dexLabel}</span>
               </div>
               <div class="result-small">
                 ${
