@@ -1,26 +1,24 @@
 // api/check.js
 // GlassBox backend
 // - Helius RPC for mint + holders
-// - DexScreener for price / liquidity / age
+// - DexScreener for price / liquidity / age / fees
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
 // Known Solana stablecoins (whitelist)
 const STABLECOIN_WHITELIST = {
-  // USDC on Solana
-  // https://explorer.solana.com/address/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+  // USDC
   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: {
     symbol: "USDC",
     name: "USD Coin (USDC)",
   },
-  // USDT on Solana
-  // https://explorer.solana.com/address/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB
+  // USDT
   Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: {
     symbol: "USDT",
     name: "Tether USD (USDT)",
   },
-  // PYUSD on Solana
+  // PYUSD (Solana)
   "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": {
     symbol: "PYUSD",
     name: "PayPal USD (PYUSD)",
@@ -122,11 +120,15 @@ async function safeGetLargestAccounts(mint) {
 
 /**
  * DexScreener helper:
- * Use the official "token-pairs" endpoint, restricted to Solana:
- *   GET /token-pairs/v1/solana/{tokenAddress}
- * and compute the USD price **for the mint itself** even if it’s
- * the QUOTE token. Also return the mint's reserve in the main pool
- * so we can match it to a holder (LP wallet detection).
+ *  - GET /token-pairs/v1/solana/{tokenAddress}
+ *  - Compute:
+ *      priceUsd  -> token price in USD
+ *      liquidityUsd
+ *      ageDays   -> pairCreatedAt -> days
+ *      feesUsd24h -> 24h trading fees (approx)
+ *      globalFeesUsd -> best-guess lifetime fees if Dex gives a long window,
+ *                       otherwise falls back to 24h estimate
+ *      poolMintReserve -> token amount in the main pool (for LP detection)
  */
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
@@ -148,6 +150,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       priceUsd: null,
       liquidityUsd: null,
       ageDays: null,
+      feesUsd24h: null,
       globalFeesUsd: null,
       poolMintReserve: null,
     };
@@ -210,6 +213,8 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   let pairCreatedAt = null;
   let volume24 = null;
   let poolMintReserve = null;
+  let feesUsd24h = null;
+  let globalFeesUsd = null;
 
   if (best) {
     selectedPair = best.pair;
@@ -247,10 +252,31 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
 
   if (selectedPair) {
     pairCreatedAt = selectedPair.pairCreatedAt;
-    volume24 =
-      selectedPair.volume?.h24 != null
-        ? Number(selectedPair.volume.h24)
-        : null;
+    // volume is an object of windows (e.g. m5, h1, h6, h24, maybe more)
+    if (selectedPair.volume && typeof selectedPair.volume === "object") {
+      const v24 = selectedPair.volume.h24;
+      if (v24 != null) {
+        const n24 = Number(v24);
+        if (!Number.isNaN(n24)) {
+          volume24 = n24;
+        }
+      }
+
+      // "Global" fees = use the largest volume window available as proxy
+      const volValues = Object.values(selectedPair.volume)
+        .map((v) => Number(v))
+        .filter((v) => !Number.isNaN(v) && v > 0);
+
+      if (volValues.length) {
+        const maxVol = Math.max(...volValues);
+        globalFeesUsd = maxVol * 0.003; // assume 0.3% fees
+      }
+    }
+  }
+
+  // 24h fees (if we had h24 volume)
+  if (volume24 != null && !Number.isNaN(volume24)) {
+    feesUsd24h = volume24 * 0.003;
   }
 
   // pairCreatedAt timestamp -> age in days (ms vs s heuristic)
@@ -268,10 +294,14 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     }
   }
 
-  const globalFeesUsd =
-    volume24 && !Number.isNaN(volume24) ? volume24 * 0.003 : null;
-
-  return { priceUsd, liquidityUsd, ageDays, globalFeesUsd, poolMintReserve };
+  return {
+    priceUsd,
+    liquidityUsd,
+    ageDays,
+    feesUsd24h,
+    globalFeesUsd,
+    poolMintReserve,
+  };
 }
 
 // Simple fallback if DexScreener is down
@@ -285,6 +315,7 @@ async function fetchDexAndAgeStatsFallback(mint) {
       priceUsd: null,
       liquidityUsd: null,
       ageDays: null,
+      feesUsd24h: null,
       globalFeesUsd: null,
       poolMintReserve: null,
     };
@@ -325,7 +356,7 @@ export default async function handler(req, res) {
     // 3) Largest accounts (holders)
     const largestPromise = safeGetLargestAccounts(mint);
 
-    // 4) Price / liquidity / age from DexScreener
+    // 4) Price / liquidity / age / fees from DexScreener
     const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
 
     const [accountInfo, asset, largest, dexStats] = await Promise.all([
@@ -373,7 +404,9 @@ export default async function handler(req, res) {
 
     const tokenMeta = { name, symbol, logoURI };
 
-    // Holder summary (top 10 wallets) WITH LP detection using pool reserve
+    // -----------------------------------------------------------------
+    // Holder summary (top 10 wallets) WITH LP detection
+    // -----------------------------------------------------------------
     const largestAccounts = largest?.value || [];
     const supplyBN =
       rawSupply && rawSupply !== "0" ? BigInt(rawSupply) : 0n;
@@ -384,7 +417,7 @@ export default async function handler(req, res) {
         : null;
 
     let lpHolder = null;
-    let bestReserveDiff = Infinity;
+    let bestReserveRelDiff = Infinity;
 
     const allHolders = largestAccounts.map((entry) => {
       const amountStr = entry.amount || "0";
@@ -405,21 +438,21 @@ export default async function handler(req, res) {
         uiAmount,
       };
 
-      // LP detection: match DexScreener pool reserve to one of the holders
+      // LP detection: use DexScreener pool reserve and match to a holder
       if (
         poolMintReserve != null &&
         !Number.isNaN(poolMintReserve) &&
+        poolMintReserve > 0 &&
         uiAmount != null &&
         !Number.isNaN(uiAmount) &&
-        poolMintReserve > 0 &&
         uiAmount > 0
       ) {
         const diff = Math.abs(uiAmount - poolMintReserve);
         const relDiff = diff / poolMintReserve;
 
-        // require fairly close match: within 5%
-        if (relDiff < 0.05 && diff < bestReserveDiff) {
-          bestReserveDiff = diff;
+        // Allow up to 20% difference (rounding, fees, multi-pool weirdness)
+        if (relDiff < 0.2 && relDiff < bestReserveRelDiff) {
+          bestReserveRelDiff = relDiff;
           lpHolder = holder;
         }
       }
@@ -429,8 +462,6 @@ export default async function handler(req, res) {
 
     const topHolders = allHolders.slice(0, 10);
 
-    // If we couldn't fetch any holders (e.g. USDC/USDT too big),
-    // don't pretend it's 0%. Use `null` so the UI can show "No holder data".
     let top10Pct = null;
     let top10PctExcludingLP = null;
 
@@ -444,6 +475,7 @@ export default async function handler(req, res) {
         const lpPct = lpInTop10 ? lpInTop10.pct || 0 : 0;
         top10PctExcludingLP = top10Pct - lpPct;
       } else {
+        // No LP detected -> same as original
         top10PctExcludingLP = top10Pct;
       }
     }
@@ -455,7 +487,9 @@ export default async function handler(req, res) {
       lpHolder,
     };
 
-    // Very simple origin hint
+    // -----------------------------------------------------------------
+    // Origin hint
+    // -----------------------------------------------------------------
     let originLabel = "Unknown protocol / origin";
     let originDetail = "";
     const lowerMint = mint.toLowerCase();
@@ -471,17 +505,27 @@ export default async function handler(req, res) {
       detail: originDetail,
     };
 
-    // Simple risk model (mint side only)
+    // -----------------------------------------------------------------
+    // Risk model (uses TOP 10 EXCLUDING LP)
+    // -----------------------------------------------------------------
     let level = "medium";
     let blurb = "";
     let score = 50;
 
-    if (!mintAuthority && !freezeAuthority && top10PctExcludingLP !== null && top10PctExcludingLP <= 25) {
+    if (
+      !mintAuthority &&
+      !freezeAuthority &&
+      top10PctExcludingLP !== null &&
+      top10PctExcludingLP <= 25
+    ) {
       level = "low";
       blurb =
         "Mint authority renounced, no freeze authority, and non-LP top holders are reasonably distributed.";
       score = 90;
-    } else if (!mintAuthority && (top10PctExcludingLP === null || top10PctExcludingLP <= 60)) {
+    } else if (
+      !mintAuthority &&
+      (top10PctExcludingLP === null || top10PctExcludingLP <= 60)
+    ) {
       level = "medium";
       blurb =
         "Mint authority renounced, but non-LP supply may still be fairly concentrated.";
@@ -489,17 +533,21 @@ export default async function handler(req, res) {
     } else {
       level = "high";
       blurb =
-        "Mint authority or freeze authority is still active and/or top holders control a large portion of supply.";
+        "Mint authority or freeze authority is still active and/or non-LP top holders control a large portion of supply.";
       score = 25;
     }
 
     const riskSummary = { level, blurb, score };
 
-    // Dex metrics + token age
+    // -----------------------------------------------------------------
+    // Dex metrics + token age + fees
+    // -----------------------------------------------------------------
     const tokenMetrics = {
       priceUsd: dexStats.priceUsd,
       liquidityUsd: dexStats.liquidityUsd,
+      // "Global" here = largest available time window DexScreener exposes (NOT perfect lifetime)
       globalFeesUsd: dexStats.globalFeesUsd,
+      feesUsd24h: dexStats.feesUsd24h,
     };
 
     const tokenAge =
@@ -513,7 +561,6 @@ export default async function handler(req, res) {
     const stableConfig = STABLECOIN_WHITELIST[mint];
 
     if (stableConfig) {
-      // Override name/symbol if missing or generic
       if (!tokenMeta.symbol) tokenMeta.symbol = stableConfig.symbol;
       if (!tokenMeta.name || tokenMeta.name === "Unknown Token") {
         tokenMeta.name = stableConfig.name;
@@ -531,7 +578,6 @@ export default async function handler(req, res) {
         "Issuer risk and smart contract risk still exist, but 'rug pull' style mint tricks " +
         "are not the main concern. Distribution and freeze authority look scary but are expected.";
 
-      // If Dex gave us nothing or something crazy, default price ~1 USD
       if (
         tokenMetrics.priceUsd == null ||
         Number.isNaN(tokenMetrics.priceUsd)
@@ -540,7 +586,9 @@ export default async function handler(req, res) {
       }
     }
 
+    // -----------------------------------------------------------------
     // Final payload
+    // -----------------------------------------------------------------
     return res.status(200).json({
       tokenMeta,
       mintInfo,
