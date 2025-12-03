@@ -9,18 +9,18 @@ const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 // Known Solana stablecoins (whitelist)
 const STABLECOIN_WHITELIST = {
   // USDC on Solana
-  // https://explorer.solana.com/address/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v :contentReference[oaicite:1]{index=1}
+  // https://explorer.solana.com/address/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: {
     symbol: "USDC",
     name: "USD Coin (USDC)",
   },
   // USDT on Solana
-  // https://explorer.solana.com/address/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB :contentReference[oaicite:2]{index=2}
+  // https://explorer.solana.com/address/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB
   Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: {
     symbol: "USDT",
     name: "Tether USD (USDT)",
   },
-  // PYUSD on Solana (from QuickNode / PyUSD docs) :contentReference[oaicite:3]{index=3}
+  // PYUSD on Solana
   "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": {
     symbol: "PYUSD",
     name: "PayPal USD (PYUSD)",
@@ -57,10 +57,7 @@ async function heliusRpc(method, params) {
 // Helpers
 // ---------------------------------------------------------------------
 
-// Decode mint account data just enough to know:
-// - supply
-// - decimals
-// - whether mint authority / freeze authority exist
+// Decode mint account data (supply, decimals, authorities)
 function parseMintAccount(base64Data) {
   const raw = Buffer.from(base64Data, "base64");
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
@@ -82,7 +79,7 @@ function parseMintAccount(base64Data) {
   const decimals = raw[offset];
   offset += 1;
 
-  // u8: isInitialized (unused here)
+  // u8: isInitialized (unused)
   offset += 1;
 
   // u32: freezeAuthorityOption
@@ -128,7 +125,8 @@ async function safeGetLargestAccounts(mint) {
  * Use the official "token-pairs" endpoint, restricted to Solana:
  *   GET /token-pairs/v1/solana/{tokenAddress}
  * and compute the USD price **for the mint itself** even if it’s
- * the QUOTE token. :contentReference[oaicite:4]{index=4}
+ * the QUOTE token. Also return the mint's reserve in the main pool
+ * so we can match it to a holder (LP wallet detection).
  */
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
@@ -143,7 +141,6 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const rawPairs = Array.isArray(json) ? json : [];
   const mintLower = mint.toLowerCase();
 
-  // Only keep Solana pairs (should already be, but be safe)
   const pairs = rawPairs.filter((p) => p && p.chainId === chainId);
 
   if (!pairs.length) {
@@ -152,10 +149,10 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       liquidityUsd: null,
       ageDays: null,
       globalFeesUsd: null,
+      poolMintReserve: null,
     };
   }
 
-  // Find the best pair where we can actually compute the mint's USD price.
   let best = null;
   let bestLiquidity = 0;
 
@@ -164,7 +161,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     const quoteAddr = p.quoteToken?.address;
 
     const rawPriceUsd =
-      p.priceUsd != null ? Number(p.priceUsd) : null; // price of BASE in USD
+      p.priceUsd != null ? Number(p.priceUsd) : null; // BASE in USD
     const priceNative =
       p.priceNative != null ? Number(p.priceNative) : null; // base in terms of quote
     const liqUsd =
@@ -174,10 +171,13 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     if (rawPriceUsd == null || Number.isNaN(rawPriceUsd)) continue;
 
     let myPriceUsd = null;
+    let poolMintReserve = null;
 
     if (baseAddr && baseAddr.toLowerCase() === mintLower) {
-      // Mint is BASE -> DexScreener priceUsd is already for the mint
+      // Mint is BASE
       myPriceUsd = rawPriceUsd;
+      poolMintReserve =
+        p.liquidity?.base != null ? Number(p.liquidity.base) : null;
     } else if (
       quoteAddr &&
       quoteAddr.toLowerCase() === mintLower &&
@@ -185,8 +185,10 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       !Number.isNaN(priceNative) &&
       priceNative !== 0
     ) {
-      // Mint is QUOTE -> priceUsd is for BASE. Quote price = priceUsd / priceNative
+      // Mint is QUOTE
       myPriceUsd = rawPriceUsd / priceNative;
+      poolMintReserve =
+        p.liquidity?.quote != null ? Number(p.liquidity.quote) : null;
     }
 
     if (myPriceUsd == null || Number.isNaN(myPriceUsd)) continue;
@@ -197,6 +199,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
         pair: p,
         priceUsd: myPriceUsd,
         liquidityUsd: liqUsd,
+        poolMintReserve,
       };
     }
   }
@@ -206,13 +209,15 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   let liquidityUsd = null;
   let pairCreatedAt = null;
   let volume24 = null;
+  let poolMintReserve = null;
 
   if (best) {
     selectedPair = best.pair;
     priceUsd = best.priceUsd;
     liquidityUsd = best.liquidityUsd;
+    poolMintReserve = best.poolMintReserve ?? null;
   } else {
-    // Fallback: pick highest-liquidity pair even if we couldn't perfectly map price
+    // Fallback: pick highest-liquidity pair even if price mapping is imperfect
     selectedPair = pairs.reduce((a, b) =>
       (a.liquidity?.usd || 0) >= (b.liquidity?.usd || 0) ? a : b
     );
@@ -224,6 +229,20 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       selectedPair.priceUsd != null
         ? Number(selectedPair.priceUsd)
         : null;
+
+    const baseAddr = selectedPair.baseToken?.address;
+    const quoteAddr = selectedPair.quoteToken?.address;
+    if (baseAddr && baseAddr.toLowerCase() === mintLower) {
+      poolMintReserve =
+        selectedPair.liquidity?.base != null
+          ? Number(selectedPair.liquidity.base)
+          : null;
+    } else if (quoteAddr && quoteAddr.toLowerCase() === mintLower) {
+      poolMintReserve =
+        selectedPair.liquidity?.quote != null
+          ? Number(selectedPair.liquidity.quote)
+          : null;
+    }
   }
 
   if (selectedPair) {
@@ -234,14 +253,12 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
         : null;
   }
 
-  // DexScreener's pairCreatedAt is a timestamp. Docs don’t state units,
-  // so we assume ms, but if it's too small treat as seconds. :contentReference[oaicite:5]{index=5}
+  // pairCreatedAt timestamp -> age in days (ms vs s heuristic)
   let ageDays = null;
   if (pairCreatedAt != null) {
     let createdMs = Number(pairCreatedAt);
     if (!Number.isNaN(createdMs) && createdMs > 0) {
       if (createdMs < 1e12) {
-        // likely seconds
         createdMs *= 1000;
       }
       const now = Date.now();
@@ -251,11 +268,10 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     }
   }
 
-  // crude fees estimate: volumeUsd24h * 0.003 if present
   const globalFeesUsd =
     volume24 && !Number.isNaN(volume24) ? volume24 * 0.003 : null;
 
-  return { priceUsd, liquidityUsd, ageDays, globalFeesUsd };
+  return { priceUsd, liquidityUsd, ageDays, globalFeesUsd, poolMintReserve };
 }
 
 // Simple fallback if DexScreener is down
@@ -270,6 +286,7 @@ async function fetchDexAndAgeStatsFallback(mint) {
       liquidityUsd: null,
       ageDays: null,
       globalFeesUsd: null,
+      poolMintReserve: null,
     };
   }
 }
@@ -351,41 +368,91 @@ export default async function handler(req, res) {
         logoURI = asset.content.links.image;
       }
     } catch (e) {
-      // ignore meta failure
       console.error("metadata parse error", e?.message);
     }
 
     const tokenMeta = { name, symbol, logoURI };
 
-    // Holder summary (top 10 wallets)
+    // Holder summary (top 10 wallets) WITH LP detection using pool reserve
     const largestAccounts = largest?.value || [];
     const supplyBN =
       rawSupply && rawSupply !== "0" ? BigInt(rawSupply) : 0n;
 
-    const topHolders = largestAccounts.slice(0, 10).map((entry) => {
-      const amountBN = BigInt(entry.amount || "0");
+    const poolMintReserve =
+      dexStats.poolMintReserve != null
+        ? Number(dexStats.poolMintReserve)
+        : null;
+
+    let lpHolder = null;
+    let bestReserveDiff = Infinity;
+
+    const allHolders = largestAccounts.map((entry) => {
+      const amountStr = entry.amount || "0";
+      const amountBN = BigInt(amountStr);
       let pct = 0;
       if (supplyBN > 0n) {
         pct = Number((amountBN * 10_000n) / supplyBN) / 100; // %
       }
-      return {
+
+      const uiAmount =
+        typeof entry.uiAmount === "number"
+          ? entry.uiAmount
+          : Number(entry.uiAmount ?? 0);
+
+      const holder = {
         address: entry.address,
         pct,
-        uiAmount: entry.uiAmount,
+        uiAmount,
       };
+
+      // LP detection: match DexScreener pool reserve to one of the holders
+      if (
+        poolMintReserve != null &&
+        !Number.isNaN(poolMintReserve) &&
+        uiAmount != null &&
+        !Number.isNaN(uiAmount) &&
+        poolMintReserve > 0 &&
+        uiAmount > 0
+      ) {
+        const diff = Math.abs(uiAmount - poolMintReserve);
+        const relDiff = diff / poolMintReserve;
+
+        // require fairly close match: within 5%
+        if (relDiff < 0.05 && diff < bestReserveDiff) {
+          bestReserveDiff = diff;
+          lpHolder = holder;
+        }
+      }
+
+      return holder;
     });
+
+    const topHolders = allHolders.slice(0, 10);
 
     // If we couldn't fetch any holders (e.g. USDC/USDT too big),
     // don't pretend it's 0%. Use `null` so the UI can show "No holder data".
     let top10Pct = null;
+    let top10PctExcludingLP = null;
 
     if (topHolders.length && rawSupply && rawSupply !== "0") {
       top10Pct = topHolders.reduce((sum, h) => sum + (h.pct || 0), 0);
+
+      if (lpHolder) {
+        const lpInTop10 = topHolders.find(
+          (h) => h.address === lpHolder.address
+        );
+        const lpPct = lpInTop10 ? lpInTop10.pct || 0 : 0;
+        top10PctExcludingLP = top10Pct - lpPct;
+      } else {
+        top10PctExcludingLP = top10Pct;
+      }
     }
 
     const holderSummary = {
       top10Pct,
+      top10PctExcludingLP,
       topHolders,
+      lpHolder,
     };
 
     // Very simple origin hint
@@ -409,15 +476,15 @@ export default async function handler(req, res) {
     let blurb = "";
     let score = 50;
 
-    if (!mintAuthority && !freezeAuthority && top10Pct !== null && top10Pct <= 25) {
+    if (!mintAuthority && !freezeAuthority && top10PctExcludingLP !== null && top10PctExcludingLP <= 25) {
       level = "low";
       blurb =
-        "Mint authority renounced, no freeze authority, and top holders are reasonably distributed.";
+        "Mint authority renounced, no freeze authority, and non-LP top holders are reasonably distributed.";
       score = 90;
-    } else if (!mintAuthority && (top10Pct === null || top10Pct <= 60)) {
+    } else if (!mintAuthority && (top10PctExcludingLP === null || top10PctExcludingLP <= 60)) {
       level = "medium";
       blurb =
-        "Mint authority renounced, but supply may still be fairly concentrated.";
+        "Mint authority renounced, but non-LP supply may still be fairly concentrated.";
       score = 65;
     } else {
       level = "high";
