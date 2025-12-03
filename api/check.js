@@ -6,6 +6,27 @@
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
+// Known Solana stablecoins (whitelist)
+const STABLECOIN_WHITELIST = {
+  // USDC on Solana
+  // https://explorer.solana.com/address/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v :contentReference[oaicite:1]{index=1}
+  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: {
+    symbol: "USDC",
+    name: "USD Coin (USDC)",
+  },
+  // USDT on Solana
+  // https://explorer.solana.com/address/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB :contentReference[oaicite:2]{index=2}
+  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: {
+    symbol: "USDT",
+    name: "Tether USD (USDT)",
+  },
+  // PYUSD on Solana (from QuickNode / PyUSD docs) :contentReference[oaicite:3]{index=3}
+  "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": {
+    symbol: "PYUSD",
+    name: "PayPal USD (PYUSD)",
+  },
+};
+
 async function heliusRpc(method, params) {
   if (!HELIUS_API_KEY) {
     throw new Error("HELIUS_API_KEY is not set in environment");
@@ -102,15 +123,28 @@ async function safeGetLargestAccounts(mint) {
   }
 }
 
-// DexScreener helper – we only care about Solana pairs for this mint
+/**
+ * DexScreener helper:
+ * Use the official "token-pairs" endpoint, restricted to Solana:
+ *   GET /token-pairs/v1/solana/{tokenAddress}
+ * and compute the USD price **for the mint itself** even if it’s
+ * the QUOTE token. :contentReference[oaicite:4]{index=4}
+ */
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
-  const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
+  const chainId = "solana";
+  const url = `https://api.dexscreener.com/token-pairs/v1/${chainId}/${mint}`;
+
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
   }
+
   const json = await res.json();
-  const pairs = Array.isArray(json.pairs) ? json.pairs : [];
+  const rawPairs = Array.isArray(json) ? json : [];
+  const mintLower = mint.toLowerCase();
+
+  // Only keep Solana pairs (should already be, but be safe)
+  const pairs = rawPairs.filter((p) => p && p.chainId === chainId);
 
   if (!pairs.length) {
     return {
@@ -121,23 +155,93 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     };
   }
 
-  // pick the pair with highest liquidity
-  const best = pairs.reduce((a, b) =>
-    (a.liquidity?.usd || 0) >= (b.liquidity?.usd || 0) ? a : b
-  );
+  // Find the best pair where we can actually compute the mint's USD price.
+  let best = null;
+  let bestLiquidity = 0;
 
-  const priceUsd = best.priceUsd ? Number(best.priceUsd) : null;
-  const liquidityUsd = best.liquidity?.usd ? Number(best.liquidity.usd) : null;
+  for (const p of pairs) {
+    const baseAddr = p.baseToken?.address;
+    const quoteAddr = p.quoteToken?.address;
 
-  // DexScreener gives pairCreatedAt (timestamp). It may be seconds or ms.
+    const rawPriceUsd =
+      p.priceUsd != null ? Number(p.priceUsd) : null; // price of BASE in USD
+    const priceNative =
+      p.priceNative != null ? Number(p.priceNative) : null; // base in terms of quote
+    const liqUsd =
+      p.liquidity?.usd != null ? Number(p.liquidity.usd) : null;
+
+    if (liqUsd == null || Number.isNaN(liqUsd)) continue;
+    if (rawPriceUsd == null || Number.isNaN(rawPriceUsd)) continue;
+
+    let myPriceUsd = null;
+
+    if (baseAddr && baseAddr.toLowerCase() === mintLower) {
+      // Mint is BASE -> DexScreener priceUsd is already for the mint
+      myPriceUsd = rawPriceUsd;
+    } else if (
+      quoteAddr &&
+      quoteAddr.toLowerCase() === mintLower &&
+      priceNative != null &&
+      !Number.isNaN(priceNative) &&
+      priceNative !== 0
+    ) {
+      // Mint is QUOTE -> priceUsd is for BASE. Quote price = priceUsd / priceNative
+      myPriceUsd = rawPriceUsd / priceNative;
+    }
+
+    if (myPriceUsd == null || Number.isNaN(myPriceUsd)) continue;
+
+    if (liqUsd > bestLiquidity) {
+      bestLiquidity = liqUsd;
+      best = {
+        pair: p,
+        priceUsd: myPriceUsd,
+        liquidityUsd: liqUsd,
+      };
+    }
+  }
+
+  let selectedPair = null;
+  let priceUsd = null;
+  let liquidityUsd = null;
+  let pairCreatedAt = null;
+  let volume24 = null;
+
+  if (best) {
+    selectedPair = best.pair;
+    priceUsd = best.priceUsd;
+    liquidityUsd = best.liquidityUsd;
+  } else {
+    // Fallback: pick highest-liquidity pair even if we couldn't perfectly map price
+    selectedPair = pairs.reduce((a, b) =>
+      (a.liquidity?.usd || 0) >= (b.liquidity?.usd || 0) ? a : b
+    );
+    liquidityUsd =
+      selectedPair.liquidity?.usd != null
+        ? Number(selectedPair.liquidity.usd)
+        : null;
+    priceUsd =
+      selectedPair.priceUsd != null
+        ? Number(selectedPair.priceUsd)
+        : null;
+  }
+
+  if (selectedPair) {
+    pairCreatedAt = selectedPair.pairCreatedAt;
+    volume24 =
+      selectedPair.volume?.h24 != null
+        ? Number(selectedPair.volume.h24)
+        : null;
+  }
+
+  // DexScreener's pairCreatedAt is a timestamp. Docs don’t state units,
+  // so we assume ms, but if it's too small treat as seconds. :contentReference[oaicite:5]{index=5}
   let ageDays = null;
-  const rawCreated = best.pairCreatedAt ?? best.createdAt;
-
-  if (rawCreated != null) {
-    let createdMs = Number(rawCreated);
+  if (pairCreatedAt != null) {
+    let createdMs = Number(pairCreatedAt);
     if (!Number.isNaN(createdMs) && createdMs > 0) {
-      // Heuristic: if it's too small, treat as seconds and convert to ms
       if (createdMs < 1e12) {
+        // likely seconds
         createdMs *= 1000;
       }
       const now = Date.now();
@@ -148,7 +252,6 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   }
 
   // crude fees estimate: volumeUsd24h * 0.003 if present
-  const volume24 = best.volume?.h24 ? Number(best.volume.h24) : null;
   const globalFeesUsd =
     volume24 && !Number.isNaN(volume24) ? volume24 * 0.003 : null;
 
@@ -336,6 +439,39 @@ export default async function handler(req, res) {
       dexStats.ageDays != null
         ? { ageDays: dexStats.ageDays }
         : { ageDays: null };
+
+    // -----------------------------------------------------------------
+    // Stablecoin special handling (whitelist)
+    // -----------------------------------------------------------------
+    const stableConfig = STABLECOIN_WHITELIST[mint];
+
+    if (stableConfig) {
+      // Override name/symbol if missing or generic
+      if (!tokenMeta.symbol) tokenMeta.symbol = stableConfig.symbol;
+      if (!tokenMeta.name || tokenMeta.name === "Unknown Token") {
+        tokenMeta.name = stableConfig.name;
+      }
+
+      originHint.label = "Known Solana stablecoin";
+      originHint.detail =
+        `${stableConfig.symbol} on Solana from a known centralized issuer. ` +
+        "High holder concentration and active freeze authority are normal for this type of token.";
+
+      riskSummary.level = "low";
+      riskSummary.score = 95;
+      riskSummary.blurb =
+        "This is a whitelisted centralized stablecoin on Solana. " +
+        "Issuer risk and smart contract risk still exist, but 'rug pull' style mint tricks " +
+        "are not the main concern. Distribution and freeze authority look scary but are expected.";
+
+      // If Dex gave us nothing or something crazy, default price ~1 USD
+      if (
+        tokenMetrics.priceUsd == null ||
+        Number.isNaN(tokenMetrics.priceUsd)
+      ) {
+        tokenMetrics.priceUsd = 1.0;
+      }
+    }
 
     // Final payload
     return res.status(200).json({
