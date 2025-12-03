@@ -96,11 +96,7 @@ async function safeGetLargestAccounts(mint) {
     // Standard SPL RPC – returns up to 20 accounts
     return await heliusRpc("getTokenLargestAccounts", [mint]);
   } catch (e) {
-    console.error(
-      "safeGetLargestAccounts error for mint",
-      mint,
-      e?.message
-    );
+    console.error("safeGetLargestAccounts error for mint", mint, e?.message);
     // Fallback: no holder data instead of hard error
     return { value: [] };
   }
@@ -131,17 +127,23 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   );
 
   const priceUsd = best.priceUsd ? Number(best.priceUsd) : null;
-  const liquidityUsd = best.liquidity?.usd
-    ? Number(best.liquidity.usd)
-    : null;
+  const liquidityUsd = best.liquidity?.usd ? Number(best.liquidity.usd) : null;
 
-  // DexScreener gives createdAt in ms
+  // DexScreener gives pairCreatedAt (timestamp). It may be seconds or ms.
   let ageDays = null;
-  if (best.createdAt) {
-    const created = new Date(best.createdAt).getTime();
-    const now = Date.now();
-    if (!Number.isNaN(created) && created > 0 && now > created) {
-      ageDays = (now - created) / (1000 * 60 * 60 * 24);
+  const rawCreated = best.pairCreatedAt ?? best.createdAt;
+
+  if (rawCreated != null) {
+    let createdMs = Number(rawCreated);
+    if (!Number.isNaN(createdMs) && createdMs > 0) {
+      // Heuristic: if it's too small, treat as seconds and convert to ms
+      if (createdMs < 1e12) {
+        createdMs *= 1000;
+      }
+      const now = Date.now();
+      if (now > createdMs) {
+        ageDays = (now - createdMs) / (1000 * 60 * 60 * 24);
+      }
     }
   }
 
@@ -270,7 +272,7 @@ export default async function handler(req, res) {
       };
     });
 
-    // 🔧 FIX: if we couldn't fetch any holders (e.g. USDC/USDT too big),
+    // If we couldn't fetch any holders (e.g. USDC/USDT too big),
     // don't pretend it's 0%. Use `null` so the UI can show "No holder data".
     let top10Pct = null;
 
