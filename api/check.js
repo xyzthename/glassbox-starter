@@ -6,23 +6,6 @@
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-const KNOWN_STABLES = {
-  // USDC (Solana)
-  "epjfwdd5aufqssqem2qn1xzybapc8g4weggkzwytdt1": {
-    symbol: "USDC",
-    nameOverride: "USD Coin (Solana)",
-    note:
-      "Canonical USDC stablecoin on Solana. Centralized issuer controls mint and freeze; contract is widely used.",
-  },
-  // USDT (Solana)
-  "es9vmfrzacerdmvgzya4a1nvumczwyvzbm6z9qkfx6f": {
-    symbol: "USDT",
-    nameOverride: "Tether USD (Solana)",
-    note:
-      "Canonical USDT stablecoin on Solana. Centralized issuer controls mint and freeze; contract is widely used.",
-  },
-};
-
 async function heliusRpc(method, params) {
   if (!HELIUS_API_KEY) {
     throw new Error("HELIUS_API_KEY is not set in environment");
@@ -40,42 +23,18 @@ async function heliusRpc(method, params) {
   });
 
   if (!res.ok) {
-    throw new Error(`Helius RPC HTTP ${res.status} ${res.statusText}`);
+    throw new Error(`RPC error: ${res.status} ${res.statusText}`);
   }
   const json = await res.json();
   if (json.error) {
-    console.error("Helius RPC error:", json.error);
-    throw new Error(json.error.message || "Helius RPC error");
+    throw new Error(json.error.message || "RPC error");
   }
   return json.result;
 }
 
-// Keep this robust: for some mints (esp. old / huge ones) asset index might not exist
-async function safeGetAsset(mint) {
-  try {
-    const result = await heliusRpc("getAsset", [mint]);
-    if (!result) return null;
-    if (result.error || result.message === "Asset not found") {
-      console.warn("getAsset asset-not-found:", mint, result);
-      return null;
-    }
-    return result;
-  } catch (err) {
-    console.warn("safeGetAsset failed for", mint, err.message);
-    return null;
-  }
-}
-
-// token holdings – we only need top accounts; Helius mirrors Solana RPC here
-async function safeGetLargestAccounts(mint) {
-  try {
-    const largest = await heliusRpc("getTokenLargestAccounts", [mint]);
-    return largest?.value || [];
-  } catch (err) {
-    console.warn("getTokenLargestAccounts failed:", mint, err.message);
-    return [];
-  }
-}
+// ---------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------
 
 // Decode mint account data just enough to know:
 // - supply
@@ -117,81 +76,102 @@ function parseMintAccount(base64Data) {
   };
 }
 
-// DexScreener: quick & dirty market data
-async function fetchDexScreenerStats(mint) {
+function shortAddr(addr) {
+  if (!addr || addr.length <= 8) return addr;
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
+}
+
+// Safe wrappers so big tokens (USDC, USDT, etc.) don’t blow us up
+async function safeGetAsset(mint) {
   try {
-    const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn("DexScreener HTTP", res.status, res.statusText);
-      return {
-        priceUsd: null,
-        liquidityUsd: null,
-        globalFeesUsd: null,
-        ageDays: null,
-      };
-    }
-    const data = await res.json();
-    const pairs = data?.pairs || [];
-    if (!pairs.length) {
-      return {
-        priceUsd: null,
-        liquidityUsd: null,
-        globalFeesUsd: null,
-        ageDays: null,
-      };
-    }
+    return await heliusRpc("getAsset", [mint]);
+  } catch (e) {
+    console.error("safeGetAsset error for mint", mint, e?.message);
+    return null;
+  }
+}
 
-    // pick the deepest pool as “best”
-    const best = pairs.reduce((a, b) => {
-      const la = Number(a.liquidity?.usd || 0);
-      const lb = Number(b.liquidity?.usd || 0);
-      return lb > la ? b : a;
-    });
+async function safeGetLargestAccounts(mint) {
+  try {
+    // Standard SPL RPC – returns up to 20 accounts
+    return await heliusRpc("getTokenLargestAccounts", [mint]);
+  } catch (e) {
+    console.error(
+      "safeGetLargestAccounts error for mint",
+      mint,
+      e?.message
+    );
+    // Fallback: no holder data instead of hard error
+    return { value: [] };
+  }
+}
 
-    const priceUsd =
-      best.priceUsd != null
-        ? Number(best.priceUsd)
-        : best?.priceNative
-        ? Number(best.priceNative)
-        : null;
+// DexScreener helper – we only care about Solana pairs for this mint
+async function fetchDexAndAgeStatsFromDexScreener(mint) {
+  const url = `https://api.dexscreener.com/latest/dex/tokens/${mint}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
+  }
+  const json = await res.json();
+  const pairs = Array.isArray(json.pairs) ? json.pairs : [];
 
-    const liquidityUsd =
-      best.liquidity?.usd != null
-        ? Number(best.liquidity.usd)
-        : null;
-
-    const fee24hUsd =
-      best.volume?.h24 != null && best.txns?.h24?.buys != null
-        ? Number(best.volume.h24) * 0.003 // rough 0.3% fee guess
-        : null;
-
-    let ageDays = null;
-    const createdAt = best.pairCreatedAt || best.createdAt;
-    if (createdAt) {
-      const createdMs = Number(createdAt);
-      if (!Number.isNaN(createdMs) && createdMs > 0) {
-        const now = Date.now();
-        ageDays = Math.max(0, (now - createdMs) / (1000 * 60 * 60 * 24));
-      }
-    }
-
-    return {
-      priceUsd: Number.isFinite(priceUsd) ? priceUsd : null,
-      liquidityUsd: Number.isFinite(liquidityUsd) ? liquidityUsd : null,
-      globalFeesUsd: Number.isFinite(fee24hUsd) ? fee24hUsd : null,
-      ageDays: ageDays != null && Number.isFinite(ageDays) ? ageDays : null,
-    };
-  } catch (err) {
-    console.warn("DexScreener fetch failed:", err.message);
+  if (!pairs.length) {
     return {
       priceUsd: null,
       liquidityUsd: null,
-      globalFeesUsd: null,
       ageDays: null,
+      globalFeesUsd: null,
+    };
+  }
+
+  // pick the pair with highest liquidity
+  const best = pairs.reduce((a, b) =>
+    (a.liquidity?.usd || 0) >= (b.liquidity?.usd || 0) ? a : b
+  );
+
+  const priceUsd = best.priceUsd ? Number(best.priceUsd) : null;
+  const liquidityUsd = best.liquidity?.usd
+    ? Number(best.liquidity.usd)
+    : null;
+
+  // DexScreener gives createdAt in ms
+  let ageDays = null;
+  if (best.createdAt) {
+    const created = new Date(best.createdAt).getTime();
+    const now = Date.now();
+    if (!Number.isNaN(created) && created > 0 && now > created) {
+      ageDays = (now - created) / (1000 * 60 * 60 * 24);
+    }
+  }
+
+  // crude fees estimate: volumeUsd24h * 0.003 if present
+  const volume24 = best.volume?.h24 ? Number(best.volume.h24) : null;
+  const globalFeesUsd =
+    volume24 && !Number.isNaN(volume24) ? volume24 * 0.003 : null;
+
+  return { priceUsd, liquidityUsd, ageDays, globalFeesUsd };
+}
+
+// Simple fallback if DexScreener is down
+async function fetchDexAndAgeStatsFallback(mint) {
+  try {
+    const res = await fetchDexAndAgeStatsFromDexScreener(mint);
+    return res;
+  } catch (e) {
+    console.error("Dex/Age stats fallback error for mint", mint, e?.message);
+    return {
+      priceUsd: null,
+      liquidityUsd: null,
+      ageDays: null,
+      globalFeesUsd: null,
     };
   }
 }
+
+// ---------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------
 
 export default async function handler(req, res) {
   try {
@@ -201,23 +181,36 @@ export default async function handler(req, res) {
     }
 
     const mint = (req.query.mint || "").trim();
-
     if (!mint) {
       return res.status(400).json({ error: "Missing mint query parameter" });
     }
+
     if (!HELIUS_API_KEY) {
       return res
         .status(500)
         .json({ error: "HELIUS_API_KEY is not set in environment" });
     }
 
-    const mintLower = mint.toLowerCase();
-    const stableInfo = KNOWN_STABLES[mintLower] || null;
-
-    // 1) Mint account info – strict
-    const accountInfo = await heliusRpc("getAccountInfo", [
+    // 1) Mint account
+    const accountInfoPromise = heliusRpc("getAccountInfo", [
       mint,
       { encoding: "base64" },
+    ]);
+
+    // 2) Metadata
+    const assetPromise = safeGetAsset(mint);
+
+    // 3) Largest accounts (holders)
+    const largestPromise = safeGetLargestAccounts(mint);
+
+    // 4) Price / liquidity / age from DexScreener
+    const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
+
+    const [accountInfo, asset, largest, dexStats] = await Promise.all([
+      accountInfoPromise,
+      assetPromise,
+      largestPromise,
+      dexStatsPromise,
     ]);
 
     if (!accountInfo?.value) {
@@ -227,82 +220,70 @@ export default async function handler(req, res) {
     }
 
     const dataBase64 = accountInfo.value.data?.[0];
-    if (!dataBase64) {
-      return res
-        .status(400)
-        .json({ error: "Mint account data missing or malformed." });
-    }
-
     const parsedMint = parseMintAccount(dataBase64);
-    const mintInfo = {
-      supply: parsedMint.supply, // string
-      decimals: parsedMint.decimals,
-    };
 
+    const rawSupply = parsedMint.supply; // string
+    const decimals = parsedMint.decimals;
     const mintAuthority = parsedMint.hasMintAuthority;
     const freezeAuthority = parsedMint.hasFreezeAuthority;
 
-    // 2) Basic metadata (name / symbol / logo) via asset
-    const asset = await safeGetAsset(mint);
+    const mintInfo = {
+      supply: rawSupply,
+      decimals,
+    };
 
+    // Token metadata from asset
     let name = "Unknown Token";
     let symbol = "";
     let logoURI = null;
 
-    if (asset?.content?.metadata) {
-      name = asset.content.metadata.name || name;
-      symbol = asset.content.metadata.symbol || symbol;
-    }
-    if (asset?.content?.links?.image) {
-      logoURI = asset.content.links.image;
-    }
-
-    // Stablecoins: override name/symbol to be super clear
-    if (stableInfo) {
-      if (stableInfo.nameOverride) name = stableInfo.nameOverride;
-      if (stableInfo.symbol) symbol = stableInfo.symbol;
+    try {
+      if (asset?.content?.metadata) {
+        name = asset.content.metadata.name || name;
+        symbol = asset.content.metadata.symbol || symbol;
+      }
+      if (asset?.content?.links?.image) {
+        logoURI = asset.content.links.image;
+      }
+    } catch (e) {
+      // ignore meta failure
+      console.error("metadata parse error", e?.message);
     }
 
     const tokenMeta = { name, symbol, logoURI };
 
-    let ageDays = null;
-    if (asset?.native?.createdAt) {
-      const createdMs = Number(asset.native.createdAt);
-      if (!Number.isNaN(createdMs) && createdMs > 0) {
-        const now = Date.now();
-        ageDays = Math.max(0, (now - createdMs) / (1000 * 60 * 60 * 24));
+    // Holder summary (top 10 wallets)
+    const largestAccounts = largest?.value || [];
+    const supplyBN =
+      rawSupply && rawSupply !== "0" ? BigInt(rawSupply) : 0n;
+
+    const topHolders = largestAccounts.slice(0, 10).map((entry) => {
+      const amountBN = BigInt(entry.amount || "0");
+      let pct = 0;
+      if (supplyBN > 0n) {
+        pct = Number((amountBN * 10_000n) / supplyBN) / 100; // %
       }
+      return {
+        address: entry.address,
+        pct,
+        uiAmount: entry.uiAmount,
+      };
+    });
+
+    // 🔧 FIX: if we couldn't fetch any holders (e.g. USDC/USDT too big),
+    // don't pretend it's 0%. Use `null` so the UI can show "No holder data".
+    let top10Pct = null;
+
+    if (topHolders.length && rawSupply && rawSupply !== "0") {
+      top10Pct = topHolders.reduce((sum, h) => sum + (h.pct || 0), 0);
     }
 
-    // 3) Largest token accounts (top holders)
-    const largestAccounts = await safeGetLargestAccounts(mint);
-
-    const supplyBN =
-      parsedMint.supply != null ? BigInt(parsedMint.supply) || 1n : 1n;
-
-    const topHolders = (largestAccounts || [])
-      .slice(0, 10)
-      .map((entry) => {
-        const amountBN = BigInt(entry.amount || "0");
-        const pct = Number((amountBN * 10_000n) / supplyBN) / 100; // %
-        return {
-          address: entry.address,
-          pct,
-          uiAmount: entry.uiAmount,
-        };
-      });
-
-    const top10Pct = topHolders.reduce(
-      (sum, h) => sum + (Number.isFinite(h.pct) ? h.pct : 0),
-      0
-    );
-
     const holderSummary = {
-      top10Pct: Number.isFinite(top10Pct) ? top10Pct : null,
+      top10Pct,
       topHolders,
     };
 
-    // 4) Origin hint – very lightweight for now
+    // Very simple origin hint
     let originLabel = "Unknown protocol / origin";
     let originDetail = "";
     const lowerMint = mint.toLowerCase();
@@ -318,29 +299,20 @@ export default async function handler(req, res) {
       detail: originDetail,
     };
 
-    // 5) Risk model – now with stablecoin override
-    const top10PctVal =
-      holderSummary.top10Pct != null ? holderSummary.top10Pct : Infinity;
-
+    // Simple risk model (mint side only)
     let level = "medium";
     let blurb = "";
     let score = 50;
 
-    if (stableInfo) {
-      level = "low";
-      blurb =
-        stableInfo.note ||
-        "Recognized Solana stablecoin. Centralized issuer controls mint and freeze; holder concentration is expected.";
-      score = 95;
-    } else if (!mintAuthority && !freezeAuthority && top10PctVal <= 25) {
+    if (!mintAuthority && !freezeAuthority && top10Pct !== null && top10Pct <= 25) {
       level = "low";
       blurb =
         "Mint authority renounced, no freeze authority, and top holders are reasonably distributed.";
       score = 90;
-    } else if (!mintAuthority && top10PctVal <= 60) {
+    } else if (!mintAuthority && (top10Pct === null || top10Pct <= 60)) {
       level = "medium";
       blurb =
-        "Mint authority renounced, but supply is still fairly concentrated.";
+        "Mint authority renounced, but supply may still be fairly concentrated.";
       score = 65;
     } else {
       level = "high";
@@ -351,22 +323,19 @@ export default async function handler(req, res) {
 
     const riskSummary = { level, blurb, score };
 
-    // 6) Market data via DexScreener
-    const dexStats = await fetchDexScreenerStats(mint);
-
+    // Dex metrics + token age
     const tokenMetrics = {
       priceUsd: dexStats.priceUsd,
       liquidityUsd: dexStats.liquidityUsd,
       globalFeesUsd: dexStats.globalFeesUsd,
     };
 
-    const tokenAge = {
-      ageDays:
-        ageDays != null && Number.isFinite(ageDays)
-          ? ageDays
-          : dexStats.ageDays ?? null,
-    };
+    const tokenAge =
+      dexStats.ageDays != null
+        ? { ageDays: dexStats.ageDays }
+        : { ageDays: null };
 
+    // Final payload
     return res.status(200).json({
       tokenMeta,
       mintInfo,
@@ -379,9 +348,7 @@ export default async function handler(req, res) {
       tokenAge,
     });
   } catch (err) {
-    console.error("check handler error:", err);
-    return res
-      .status(500)
-      .json({ error: err.message || "Internal GlassBox backend error" });
+    console.error("API /api/check error:", err);
+    return res.status(500).json({ error: err.message || "Internal error" });
   }
 }
