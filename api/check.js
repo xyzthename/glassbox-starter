@@ -1,7 +1,7 @@
 // api/check.js
 // GlassBox backend
 // - Helius RPC for mint + holders
-// - DexScreener for price / liquidity / age / fees
+// - DexScreener for price / liquidity / age / 24h DEX fees
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
@@ -122,13 +122,11 @@ async function safeGetLargestAccounts(mint) {
  * DexScreener helper:
  *  - GET /token-pairs/v1/solana/{tokenAddress}
  *  - Compute:
- *      priceUsd  -> token price in USD
+ *      priceUsd         -> token price in USD
  *      liquidityUsd
- *      ageDays   -> pairCreatedAt -> days
- *      feesUsd24h -> 24h trading fees (approx)
- *      globalFeesUsd -> best-guess lifetime fees if Dex gives a long window,
- *                       otherwise falls back to 24h estimate
- *      poolMintReserve -> token amount in the main pool (for LP detection)
+ *      ageDays          -> pairCreatedAt -> days
+ *      dexFeesUsd24h    -> ~24h DEX trading fees in USD (0.3% of h24 volume)
+ *      poolMintReserve  -> token amount in the main pool (for LP detection)
  */
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
@@ -150,8 +148,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       priceUsd: null,
       liquidityUsd: null,
       ageDays: null,
-      feesUsd24h: null,
-      globalFeesUsd: null,
+      dexFeesUsd24h: null,
       poolMintReserve: null,
     };
   }
@@ -213,8 +210,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   let pairCreatedAt = null;
   let volume24 = null;
   let poolMintReserve = null;
-  let feesUsd24h = null;
-  let globalFeesUsd = null;
+  let dexFeesUsd24h = null;
 
   if (best) {
     selectedPair = best.pair;
@@ -250,36 +246,26 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     }
   }
 
-  if (selectedPair) {
-    pairCreatedAt = selectedPair.pairCreatedAt;
-    // volume is an object of windows (e.g. m5, h1, h6, h24, maybe more)
-    if (selectedPair.volume && typeof selectedPair.volume === "object") {
-      const v24 = selectedPair.volume.h24;
-      if (v24 != null) {
-        const n24 = Number(v24);
-        if (!Number.isNaN(n24)) {
-          volume24 = n24;
-        }
-      }
-
-      // "Global" fees = use the largest volume window available as proxy
-      const volValues = Object.values(selectedPair.volume)
-        .map((v) => Number(v))
-        .filter((v) => !Number.isNaN(v) && v > 0);
-
-      if (volValues.length) {
-        const maxVol = Math.max(...volValues);
-        globalFeesUsd = maxVol * 0.003; // assume 0.3% fees
+  if (selectedPair && selectedPair.volume && typeof selectedPair.volume === "object") {
+    const v24 = selectedPair.volume.h24;
+    if (v24 != null) {
+      const n24 = Number(v24);
+      if (!Number.isNaN(n24)) {
+        volume24 = n24;
       }
     }
   }
 
-  // 24h fees (if we had h24 volume)
+  // 24h DEX fee estimate (assuming 0.3% pool fee)
   if (volume24 != null && !Number.isNaN(volume24)) {
-    feesUsd24h = volume24 * 0.003;
+    dexFeesUsd24h = volume24 * 0.003;
   }
 
   // pairCreatedAt timestamp -> age in days (ms vs s heuristic)
+  if (selectedPair) {
+    pairCreatedAt = selectedPair.pairCreatedAt;
+  }
+
   let ageDays = null;
   if (pairCreatedAt != null) {
     let createdMs = Number(pairCreatedAt);
@@ -298,8 +284,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     priceUsd,
     liquidityUsd,
     ageDays,
-    feesUsd24h,
-    globalFeesUsd,
+    dexFeesUsd24h,
     poolMintReserve,
   };
 }
@@ -315,8 +300,7 @@ async function fetchDexAndAgeStatsFallback(mint) {
       priceUsd: null,
       liquidityUsd: null,
       ageDays: null,
-      feesUsd24h: null,
-      globalFeesUsd: null,
+      dexFeesUsd24h: null,
       poolMintReserve: null,
     };
   }
@@ -356,7 +340,7 @@ export default async function handler(req, res) {
     // 3) Largest accounts (holders)
     const largestPromise = safeGetLargestAccounts(mint);
 
-    // 4) Price / liquidity / age / fees from DexScreener
+    // 4) Price / liquidity / age / 24h fees from DexScreener
     const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
 
     const [accountInfo, asset, largest, dexStats] = await Promise.all([
@@ -419,7 +403,8 @@ export default async function handler(req, res) {
     let lpHolder = null;
     let bestReserveRelDiff = Infinity;
 
-    const allHolders = largestAccounts.map((entry) => {
+    // First pass: build all holders + try to detect LP
+    let allHolders = largestAccounts.map((entry) => {
       const amountStr = entry.amount || "0";
       const amountBN = BigInt(amountStr);
       let pct = 0;
@@ -438,7 +423,7 @@ export default async function handler(req, res) {
         uiAmount,
       };
 
-      // LP detection: use DexScreener pool reserve and match to a holder
+      // Primary LP detection: match DexScreener pool reserve to a holder
       if (
         poolMintReserve != null &&
         !Number.isNaN(poolMintReserve) &&
@@ -450,7 +435,7 @@ export default async function handler(req, res) {
         const diff = Math.abs(uiAmount - poolMintReserve);
         const relDiff = diff / poolMintReserve;
 
-        // Allow up to 20% difference (rounding, fees, multi-pool weirdness)
+        // Allow up to 20% slack for rounding / fees / pool drift
         if (relDiff < 0.2 && relDiff < bestReserveRelDiff) {
           bestReserveRelDiff = relDiff;
           lpHolder = holder;
@@ -460,30 +445,49 @@ export default async function handler(req, res) {
       return holder;
     });
 
-    const topHolders = allHolders.slice(0, 10);
+    // Ensure sorted by balance (RPC usually is, but be safe)
+    allHolders.sort((a, b) => (b.uiAmount || 0) - (a.uiAmount || 0));
+
+    // Fallback LP detection: if no LP matched by reserve but
+    // top holder has a huge chunk (>= 40%), treat first holder as LP.
+    if (!lpHolder && allHolders.length > 0 && allHolders[0].pct >= 40) {
+      lpHolder = allHolders[0];
+    }
+
+    // Top 10 INCLUDING LP (raw)
+    const top10InclLP = allHolders.slice(0, 10);
+
+    // Top 10 EXCLUDING LP (remove LP first, then take next 10)
+    const nonLpHolders = lpHolder
+      ? allHolders.filter((h) => h.address !== lpHolder.address)
+      : allHolders;
+
+    const top10ExclLP = nonLpHolders.slice(0, 10);
 
     let top10Pct = null;
     let top10PctExcludingLP = null;
 
-    if (topHolders.length && rawSupply && rawSupply !== "0") {
-      top10Pct = topHolders.reduce((sum, h) => sum + (h.pct || 0), 0);
+    if (top10InclLP.length && rawSupply && rawSupply !== "0") {
+      top10Pct = top10InclLP.reduce((sum, h) => sum + (h.pct || 0), 0);
+    }
 
-      if (lpHolder) {
-        const lpInTop10 = topHolders.find(
-          (h) => h.address === lpHolder.address
-        );
-        const lpPct = lpInTop10 ? lpInTop10.pct || 0 : 0;
-        top10PctExcludingLP = top10Pct - lpPct;
-      } else {
-        // No LP detected -> same as original
-        top10PctExcludingLP = top10Pct;
-      }
+    if (top10ExclLP.length && rawSupply && rawSupply !== "0") {
+      top10PctExcludingLP = top10ExclLP.reduce(
+        (sum, h) => sum + (h.pct || 0),
+        0
+      );
     }
 
     const holderSummary = {
+      // Top 10 including LP (raw concentration)
       top10Pct,
+      topHolders: top10InclLP,
+
+      // Top 10 AFTER dropping the LP wallet
       top10PctExcludingLP,
-      topHolders,
+      topHoldersExcludingLP: top10ExclLP,
+
+      // LP wallet we detected (or null)
       lpHolder,
     };
 
@@ -540,14 +544,13 @@ export default async function handler(req, res) {
     const riskSummary = { level, blurb, score };
 
     // -----------------------------------------------------------------
-    // Dex metrics + token age + fees
+    // Dex metrics + token age + 24h DEX fee estimate
     // -----------------------------------------------------------------
     const tokenMetrics = {
       priceUsd: dexStats.priceUsd,
       liquidityUsd: dexStats.liquidityUsd,
-      // "Global" here = largest available time window DexScreener exposes (NOT perfect lifetime)
-      globalFeesUsd: dexStats.globalFeesUsd,
-      feesUsd24h: dexStats.feesUsd24h,
+      // IMPORTANT: this is 24h DEX fees est., NOT global chain fees
+      dexFeesUsd24h: dexStats.dexFeesUsd24h,
     };
 
     const tokenAge =
