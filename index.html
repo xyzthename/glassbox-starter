@@ -496,17 +496,23 @@
       margin-top: 4px;
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 6px;
+      justify-content: center; /* center pills */
     }
 
     .holder-chip {
-      font-size: 10px;
-      padding: 3px 7px;
+      font-size: 11px;
+      padding: 5px 11px;
       border-radius: 999px;
       border: 1px solid rgba(148, 163, 184, 0.45);
       background: rgba(15, 23, 42, 0.95);
       color: #e5e7ff;
       text-decoration: none;
+    }
+
+    .holder-chip.lp-holder {
+      border-color: rgba(56, 189, 248, 0.85);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.45);
     }
 
     .holder-chip:hover {
@@ -1013,7 +1019,7 @@
 
         const priceUsd = tokenMetrics?.priceUsd ?? null;
         const liquidityUsd = tokenMetrics?.liquidityUsd ?? null;
-        const globalFeesUsd = tokenMetrics?.globalFeesUsd ?? null;
+        const dexFeesUsd24h = tokenMetrics?.dexFeesUsd24h ?? null; // NEW
 
         const rawSupply = mintInfo?.supply;
         const decimals = mintInfo?.decimals ?? 0;
@@ -1022,16 +1028,25 @@
             ? Number(rawSupply) / Math.pow(10, decimals || 0)
             : null;
 
-        const holdersTop10 = holderSummary?.top10Pct ?? null;
+        const lpHolder = holderSummary?.lpHolder || null;
+        const topHolders = holderSummary?.topHolders || [];
+
+        // Use Top 10 excluding LP for the % badge (fallback to old field)
+        const holdersTop10 =
+          holderSummary?.top10PctExcludingLP != null
+            ? holderSummary.top10PctExcludingLP
+            : holderSummary?.top10Pct ?? null;
+
         const holdersBarWidth =
           holdersTop10 != null
             ? Math.min(100, Math.max(0, holdersTop10))
             : 0;
-        const topHolders = holderSummary?.topHolders || [];
 
         const holdersLabel =
           holdersTop10 != null
-            ? `${holdersTop10.toFixed(1)}% held by top 10 wallets`
+            ? `${holdersTop10.toFixed(
+                1
+              )}% held by top 10 wallets (excl. LP)`
             : "No holder data";
 
         const renouncedMint = !mintAuthority;
@@ -1050,8 +1065,18 @@
               ${topHolders
                 .map((h, idx) => {
                   const rank = String(idx + 1).padStart(2, "0");
-                  return `<a class="holder-chip" href="https://solscan.io/account/${h.address}" target="_blank" rel="noopener noreferrer">
-                      ${rank}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%
+                  const isLp =
+                    lpHolder &&
+                    lpHolder.address &&
+                    lpHolder.address === h.address;
+                  return `<a class="holder-chip${
+                    isLp ? " lp-holder" : ""
+                  }" href="https://solscan.io/account/${
+                    h.address
+                  }" target="_blank" rel="noopener noreferrer">
+                      ${rank}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%${
+                    isLp ? " 💧" : ""
+                  }
                     </a>`;
                 })
                 .join("")}
@@ -1134,8 +1159,8 @@
               }</div>
             </div>
             <div class="metric-pill">
-              <div class="metric-label">Global Fees Paid</div>
-              <div class="metric-value">${formatUsd(globalFeesUsd)}</div>
+              <div class="metric-label">24h DEX fees (est.)</div>
+              <div class="metric-value">${formatUsd(dexFeesUsd24h)}</div>
             </div>
             <div class="metric-pill">
               <div class="metric-label">Token Age</div>
