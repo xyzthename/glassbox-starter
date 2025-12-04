@@ -184,7 +184,7 @@ async function safeCountTokenHolders(mint) {
  *      dexFeesUsd24h    -> ~24h DEX trading fees in USD (0.3% of h24 volume)
  *      poolMintReserve  -> token amount in the main pool (for LP detection)
  *      volume24Usd      -> 24h volume in USD
- *      txCount24        -> 24h trades count (buys + sells)
+ *      txCount24        -> 24h trades (buys + sells)
  */
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
@@ -308,11 +308,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   }
 
   // 24h volume (USD)
-  if (
-    selectedPair &&
-    selectedPair.volume &&
-    typeof selectedPair.volume === "object"
-  ) {
+  if (selectedPair && selectedPair.volume && typeof selectedPair.volume === "object") {
     const v24 = selectedPair.volume.h24;
     if (v24 != null) {
       const n24 = Number(v24);
@@ -373,8 +369,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
 // Simple fallback if DexScreener is down
 async function fetchDexAndAgeStatsFallback(mint) {
   try {
-    const res = await fetchDexAndAgeStatsFromDexScreener(mint);
-    return res;
+    return await fetchDexAndAgeStatsFromDexScreener(mint);
   } catch (e) {
     console.error("Dex/Age stats fallback error for mint", mint, e?.message);
     return {
@@ -423,7 +418,7 @@ export default async function handler(req, res) {
     // 3) Largest accounts (holders, top 20)
     const largestPromise = safeGetLargestAccounts(mint);
 
-    // 4) Price / liquidity / age / 24h fees from DexScreener
+    // 4) Price / liquidity / age / 24h fees from DexScreener (with fallback)
     const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
 
     // 5) Total unique holders (via getTokenAccountsByMint)
@@ -569,8 +564,8 @@ export default async function handler(req, res) {
     // ---------------------------------------------------------------
     // Insider / whale snapshot (non-LP wallets only)
     // ---------------------------------------------------------------
-    const INSIDER_THRESHOLD_PCT = 1; // wallets >= 1% count as insiders
-    const WHALE_THRESHOLD_PCT = 5; // wallets >= 5% count as whales
+    const INSIDER_THRESHOLD_PCT = 1;  // wallets >= 1% count as insiders
+    const WHALE_THRESHOLD_PCT = 5;    // wallets >= 5% count as whales
 
     const insidersAll = nonLpHolders.filter(
       (h) => (h.pct || 0) >= INSIDER_THRESHOLD_PCT
@@ -595,23 +590,25 @@ export default async function handler(req, res) {
         "No non-LP wallet holds more than 1% of supply. Insider risk looks low based on distribution.";
     } else if (insidersTotalPct <= 20 && whales.length <= 1) {
       insiderRiskLevel = "medium";
-      insiderNote = `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
-        1
-      )}% of supply). Some concentrated holders but not extreme.`;
+      insiderNote =
+        `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
+          1
+        )}% of supply). Some concentrated holders but not extreme.`;
     } else {
       insiderRiskLevel = "high";
-      insiderNote = `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
-        1
-      )}% of supply). This is a strong insider/whale cluster.`;
+      insiderNote =
+        `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
+          1
+        )}% of supply). This is a strong insider/whale cluster.`;
     }
 
     const insiderSummary = {
-      insiderCount: insidersAll.length, // # wallets >=1%
-      whaleCount: whales.length, // # wallets >=5%
-      insidersTotalPct, // % of supply (ex-LP) they control
-      largestInsider, // top insider wallet (if any)
-      riskLevel: insiderRiskLevel, // low / medium / high
-      note: insiderNote, // human-readable summary
+      insiderCount: insidersAll.length,   // # wallets >=1%
+      whaleCount: whales.length,         // # wallets >=5%
+      insidersTotalPct,                  // % of supply (ex-LP) they control
+      largestInsider,                    // top insider wallet (if any)
+      riskLevel: insiderRiskLevel,       // low / medium / high
+      note: insiderNote,                 // human-readable summary
     };
 
     const effectiveHoldersCount =
@@ -706,11 +703,12 @@ export default async function handler(req, res) {
     const liqUsd = dexStats.liquidityUsd;
     const vol24 = dexStats.volume24Usd ?? null;
     const txCount24 = dexStats.txCount24 ?? null;
+    const ageDays = dexStats.ageDays != null ? Number(dexStats.ageDays) : null;
 
     let liqTruthLevel = "unknown";
     let liqTruthLabel = "Unknown";
     let liqTruthNote =
-      "Not enough DEX data to judge whether liquidity is real or spoofed.";
+      "Not enough DEX data to judge whether liquidity is real or spoofed yet.";
     let tradeToLiquidity = null;
     let avgTradeUsd = null;
 
@@ -725,39 +723,67 @@ export default async function handler(req, res) {
       !Number.isNaN(txCount24) &&
       txCount24 > 0
     ) {
-      tradeToLiquidity = vol24 / liqUsd; // how many times liquidity churned in 24h
-      avgTradeUsd = vol24 / txCount24;
-
-      // Heuristic:
-      // - very high volume vs liquidity + few trades  → likely wash / fake
-      // - moderate volume vs liquidity + modest trades → suspicious
-      // - otherwise → mostly real
-      if (tradeToLiquidity > 100 && txCount24 < 50) {
-        liqTruthLevel = "high";
-        liqTruthLabel = "Likely fake / wash";
+      // Very young pools / very few trades → don't over-judge
+      if (ageDays != null && ageDays < 0.25) {
+        // < ~6 hours
+        liqTruthLevel = "unknown";
+        liqTruthLabel = "Too new";
         liqTruthNote =
-          "24h volume is extremely high versus liquidity with very few trades. This pattern often indicates wash trading or spoofed volume.";
-      } else if (tradeToLiquidity > 30 && txCount24 < 150) {
-        liqTruthLevel = "medium";
-        liqTruthLabel = "Suspicious";
+          "Pool is only a few hours old. Fake vs real liquidity can’t be judged reliably yet.";
+      } else if (txCount24 < 20) {
+        liqTruthLevel = "unknown";
+        liqTruthLabel = "Too few trades";
         liqTruthNote =
-          "24h volume is large relative to liquidity, but trade count is modest. Liquidity may be partially fake or heavily farmed.";
+          "24h trade count is very low. Volume/liquidity patterns are noisy at this stage.";
       } else {
-        liqTruthLevel = "low";
-        liqTruthLabel = "Mostly real";
-        liqTruthNote =
-          "Volume and trade count look consistent with liquidity size. No obvious fake-liquidity pattern detected.";
+        tradeToLiquidity = vol24 / liqUsd; // how many times liquidity churned in 24h
+        avgTradeUsd = vol24 / txCount24;
+
+        // Heuristic:
+        // - very high volume vs liquidity + few trades  → likely wash / fake
+        // - moderate volume vs liquidity + modest trades → suspicious
+        // - otherwise → mostly real
+        if (tradeToLiquidity > 100 && txCount24 < 50) {
+          liqTruthLevel = "high";
+          liqTruthLabel = "Likely fake / wash";
+          liqTruthNote =
+            "24h volume is extremely high versus liquidity with very few trades. This pattern often indicates wash trading or spoofed volume.";
+        } else if (tradeToLiquidity > 30 && txCount24 < 150) {
+          liqTruthLevel = "medium";
+          liqTruthLabel = "Suspicious";
+          liqTruthNote =
+            "24h volume is large relative to liquidity, but trade count is modest. Liquidity may be partially fake or heavily farmed.";
+        } else {
+          liqTruthLevel = "low";
+          liqTruthLabel = "Mostly real";
+          liqTruthNote =
+            "Volume and trade count look consistent with liquidity size. No obvious fake-liquidity pattern detected.";
+        }
       }
     }
 
     const liquidityTruth = {
-      level: liqTruthLevel, // low / medium / high / unknown
-      label: liqTruthLabel, // short label for UI
-      note: liqTruthNote, // human-readable explanation
-      volume24Usd: vol24, // raw 24h volume
-      txCount24, // # trades (buys + sells)
-      tradeToLiquidity, // volume / liquidity ratio
-      avgTradeUsd, // average trade size
+      level: liqTruthLevel,          // low / medium / high / unknown
+      label: liqTruthLabel,          // short label for UI
+      note: liqTruthNote,            // human-readable explanation
+      volume24Usd: vol24,           // raw 24h volume
+      txCount24,                    // # trades (buys + sells)
+      tradeToLiquidity,             // volume / liquidity ratio
+      avgTradeUsd,                  // average trade size
+    };
+
+    // -----------------------------------------------------------------
+    // Liquidity lock status (placeholder – needs LP lock indexer)
+    // -----------------------------------------------------------------
+    // NOTE: With our current data sources (mint holders + DexScreener pool),
+    // we CANNOT reliably tell if LP tokens are locked or burnt.
+    // To avoid lying to users, we expose this as "unknown" for now.
+    // When you plug in an LP-lock API / on-chain indexer, populate this.
+    const liquidityLock = {
+      status: "unknown",        // "unknown" | "unlocked" | "locked_partial" | "locked_mostly"
+      percentLocked: null,      // 0–100 if known
+      note:
+        "GlassBox cannot yet reliably detect LP lock/burn on Solana without a dedicated LP indexer. Treat unknown as NOT guaranteed safe.",
     };
 
     // -----------------------------------------------------------------
@@ -806,6 +832,7 @@ export default async function handler(req, res) {
       tokenMetrics,
       tokenAge,
       liquidityTruth,
+      liquidityLock,
     });
   } catch (err) {
     console.error("API /api/check error:", err);
