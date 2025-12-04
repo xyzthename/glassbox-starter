@@ -1244,16 +1244,20 @@
 
               <div class="result-row">
                 <span class="result-label">Insider wallets</span>
-                <span class="badge ${insiderBadgeClass}">
+                <span
+                  class="badge ${insiderBadgeClass}"
+                  title="${
+                    insiderCount
+                      ? `${insiderCount} wallets each hold at least 1% of the total supply (LP excluded).`
+                      : `No non-LP wallet holds ≥1% of the total supply.`
+                  }"
+                >
                   ${
                     insiderCount
-                      ? `${insiderCount} ≥1% holder${
-                          insiderCount > 1 ? "s" : ""
-                        }`
+                      ? `${insiderCount} ≥1% holder${insiderCount > 1 ? "s" : ""}`
                       : "Low"
                   }
                 </span>
-              </div>
 
               <div class="holders-bar">
                 <div class="holders-bar-fill" style="width:${holdersBarWidth}%;"></div>
