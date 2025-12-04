@@ -985,6 +985,7 @@
         riskSummary,
         tokenMetrics,
         tokenAge,
+        liquidityTruth,
       } = data;
 
       const canonicalMint = mint.trim();
@@ -1104,6 +1105,20 @@
         insiderBadgeClass = "badge-warn";
       }
 
+      // Liquidity truth from backend
+      const liqTruth = liquidityTruth || {};
+      const liqTruthLevel = liqTruth.level || "unknown";
+      const liqTruthLabel = liqTruth.label || "Unknown";
+      const liqTruthNote =
+        liqTruth.note ||
+        "Not enough on-chain / DEX data yet to evaluate liquidity quality.";
+
+      let liqTruthBadgeClass = "";
+      if (liqTruthLevel === "low") liqTruthBadgeClass = "badge-good";
+      else if (liqTruthLevel === "medium") liqTruthBadgeClass = "badge-warn";
+      else if (liqTruthLevel === "high") liqTruthBadgeClass = "badge-bad";
+
+
       const displayForRecent =
         symbol || name || shortAddr(canonicalMint) || "Token";
       addRecent({
@@ -1211,6 +1226,15 @@
               <span class="result-label">Freeze authority</span>
               <span class="badge ${canFreeze ? "badge-bad" : "badge-good"}">
                 ${canFreeze ? "Can freeze tokens" : "None"}
+              </span>
+            </div>
+            <div class="result-row">
+              <span class="result-label">Liquidity truth</span>
+              <span
+                class="badge ${liqTruthBadgeClass}"
+                title="${liqTruthNote}"
+              >
+                ${liqTruthLabel}
               </span>
             </div>
             <div class="result-small">
