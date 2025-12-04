@@ -309,6 +309,36 @@ async function fetchDexAndAgeStatsFallback(mint) {
 // ---------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------
+// Count unique wallet addresses that hold a non-zero balance of this mint
+async function countTokenHolders(mint) {
+  try {
+    const result = await heliusRpc("getTokenAccountsByMint", [
+      mint,
+      { commitment: "processed", encoding: "jsonParsed" },
+    ]);
+
+    const accounts = result?.value || [];
+    const owners = new Set();
+
+    for (const acc of accounts) {
+      const parsed = acc.account?.data?.parsed;
+      const info = parsed?.info;
+      if (!info) continue;
+
+      const owner = info.owner;
+      const uiAmount = info.tokenAmount?.uiAmount ?? 0;
+
+      // ignore empty / dust accounts
+      if (!owner || !uiAmount || uiAmount <= 0) continue;
+      owners.add(owner);
+    }
+
+    return owners.size;
+  } catch (e) {
+    console.error("countTokenHolders error for mint", mint, e?.message);
+    return null; // don't break the API if this fails
+  }
+}
 
 export default async function handler(req, res) {
   try {
@@ -343,12 +373,24 @@ export default async function handler(req, res) {
     // 4) Price / liquidity / age / 24h fees from DexScreener
     const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
 
-    const [accountInfo, asset, largest, dexStats] = await Promise.all([
-      accountInfoPromise,
-      assetPromise,
-      largestPromise,
-      dexStatsPromise,
-    ]);
+    // before
+const [accountInfo, asset, largest, dexStats] = await Promise.all([
+  accountInfoPromise,
+  assetPromise,
+  largestPromise,
+  dexStatsPromise,
+]);
+
+// after
+const holdersCountPromise = countTokenHolders(mint);
+
+const [accountInfo, asset, largest, dexStats, holdersCount] = await Promise.all([
+  accountInfoPromise,
+  assetPromise,
+  largestPromise,
+  dexStatsPromise,
+  holdersCountPromise,
+]);
 
     if (!accountInfo?.value) {
       return res
@@ -479,17 +521,21 @@ export default async function handler(req, res) {
     }
 
     const holderSummary = {
-      // Top 10 including LP (raw concentration)
-      top10Pct,
-      topHolders: top10InclLP,
+  // Top 10 including LP (raw concentration)
+  top10Pct,
+  topHolders: top10InclLP,
 
-      // Top 10 AFTER dropping the LP wallet
-      top10PctExcludingLP,
-      topHoldersExcludingLP: top10ExclLP,
+  // Top 10 AFTER dropping the LP wallet
+  top10PctExcludingLP,
+  topHoldersExcludingLP: top10ExclLP,
 
-      // LP wallet we detected (or null)
-      lpHolder,
-    };
+  // LP wallet we detected (or null)
+  lpHolder,
+
+  // NEW: total number of unique wallets holding a non-zero amount
+  holdersCount,
+};
+
 
     // -----------------------------------------------------------------
     // Origin hint
