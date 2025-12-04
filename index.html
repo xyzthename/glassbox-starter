@@ -676,7 +676,7 @@
   </div>
 
   <!-- SCRIPT -->
-  <script>
+ <script>
   const API_BASE = "/api/check";
   const RECENT_KEY = "glassbox_recent_mints_v1";
 
@@ -893,8 +893,8 @@
             <button class="preset-btn" data-mint="${r.mint}">
               ${r.display}
               <span class="${presetRiskClass(r.level)}">· ${labelForRisk(
-                r.level
-              )}</span>
+            r.level
+          )}</span>
             </button>`
         )
         .join("");
@@ -905,8 +905,8 @@
             <button class="preset-btn" data-mint="${r.mint}">
               ${r.display}
               <span class="${presetRiskClass(r.level)}">· ${labelForRisk(
-                r.level
-              )}</span>
+            r.level
+          )}</span>
             </button>`
         )
         .join("");
@@ -986,6 +986,7 @@
         tokenMetrics,
         tokenAge,
         liquidityTruth,
+        liquidityLock,
       } = data;
 
       const canonicalMint = mint.trim();
@@ -1118,6 +1119,44 @@
       else if (liqTruthLevel === "medium") liqTruthBadgeClass = "badge-warn";
       else if (liqTruthLevel === "high") liqTruthBadgeClass = "badge-bad";
 
+      // Liquidity lock / burn display
+      const liqLock = liquidityLock || {};
+      const liqLockStatus = liqLock.status || "unknown";
+      const lockedPct =
+        typeof liqLock.lockedPct === "number" && !Number.isNaN(liqLock.lockedPct)
+          ? liqLock.lockedPct
+          : null;
+
+      let liqLockLabel = "Unknown";
+      let liqLockBadgeClass = "badge-bad"; // unknown and "no" = red by your rule
+      const liqLockNote =
+        liqLock.note ||
+        "Could not confidently determine whether LP tokens are locked or burned.";
+
+      if (liqLockStatus === "locked" || liqLockStatus === "burned") {
+        if (lockedPct != null) {
+          const pctDisplay = lockedPct.toFixed(1) + "%";
+          liqLockLabel = pctDisplay;
+          if (lockedPct >= 90) {
+            liqLockBadgeClass = "badge-good"; // green
+          } else if (lockedPct >= 80) {
+            liqLockBadgeClass = "badge-warn"; // yellow
+          } else {
+            liqLockBadgeClass = "badge-bad"; // red
+          }
+        } else {
+          liqLockLabel = "Yes";
+          liqLockBadgeClass = "badge-warn";
+        }
+      } else if (liqLockStatus === "unlocked") {
+        // your rule: if it is not locked/burnt = "no" and red
+        liqLockLabel = "No";
+        liqLockBadgeClass = "badge-bad";
+      } else {
+        // unknown → "Unknown" and red
+        liqLockLabel = "Unknown";
+        liqLockBadgeClass = "badge-bad";
+      }
 
       const displayForRecent =
         symbol || name || shortAddr(canonicalMint) || "Token";
@@ -1229,6 +1268,15 @@
               </span>
             </div>
             <div class="result-row">
+              <span class="result-label">Liquidity lock</span>
+              <span
+                class="badge ${liqLockBadgeClass}"
+                title="${liqLockNote}"
+              >
+                ${liqLockLabel}
+              </span>
+            </div>
+            <div class="result-row">
               <span class="result-label">Liquidity truth</span>
               <span
                 class="badge ${liqTruthBadgeClass}"
@@ -1332,61 +1380,26 @@
             <a class="tool-btn" href="https://photon-sol.tinyastro.io/@xyzthegod" target="_blank" rel="noopener noreferrer">
               <span>⚡ Photon</span>
             </a>
-            <a class="tool-btn" href="https://stalk.fun/?r=ZATEZOJI" target="_blank" rel="noopener noreferrer">
-              <span>👁️ StalkFun</span>
+            <a class="tool-btn" href="https://stalk.fun" target="_blank" rel="noopener noreferrer">
+              <span>🕵️ StalkFun</span>
             </a>
-          </div>
-          <div class="result-small">
-            These are your referral links. Using them supports GlassBox at no extra cost to the user.
-          </div>
-          <div class="result-small" style="margin-top:4px;text-align:right;font-size:10px;">
-            <span style="opacity:0.85;">GlassBox Pro (degen alerts &amp; MEV shield) coming soon.</span>
-          </div>
-        </div>
-
-        <div class="actions-row">
-          <div class="actions-left">
-            <a
-              class="btn-secondary"
-              href="${jupUrl}"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              🔄 Swap on Jupiter
-            </a>
-          </div>
-          <div class="actions-right">
-            <button class="btn-ghost" id="copyMintBtn">
-              📋 Copy Contract Address
-            </button>
           </div>
         </div>
       `;
-
-      const copyBtn = document.getElementById("copyMintBtn");
-      if (copyBtn) {
-        copyBtn.onclick = async () => {
-          try {
-            await navigator.clipboard.writeText(canonicalMint);
-            copyBtn.textContent = "✅ Copied";
-            setTimeout(() => {
-              copyBtn.textContent = "📋 Copy mint";
-            }, 1200);
-          } catch (e) {
-            console.error(e);
-          }
-        };
-      }
     } catch (err) {
-      console.error(err);
-      renderError(err.message || "Failed to scan this mint.");
+      console.error("frontend scan error", err);
+      renderError(err?.message || "Something went wrong during the scan.");
     } finally {
       setLoading(false);
     }
   }
 
-  checkBtn.addEventListener("click", handleCheck);
-  mintInput.addEventListener("keydown", (e) => {
+  checkBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    handleCheck();
+  });
+
+  mintInput.addEventListener("keyup", (e) => {
     if (e.key === "Enter") {
       handleCheck();
     }
