@@ -535,6 +535,56 @@ export default async function handler(req, res) {
       );
     }
 
+        // ---------------------------------------------------------------
+    // Insider / whale snapshot (non-LP wallets only)
+    // ---------------------------------------------------------------
+    const INSIDER_THRESHOLD_PCT = 1;  // wallets >= 1% count as insiders
+    const WHALE_THRESHOLD_PCT = 5;    // wallets >= 5% count as whales
+
+    const insidersAll = nonLpHolders.filter(
+      (h) => (h.pct || 0) >= INSIDER_THRESHOLD_PCT
+    );
+    const whales = nonLpHolders.filter(
+      (h) => (h.pct || 0) >= WHALE_THRESHOLD_PCT
+    );
+
+    const insidersTotalPct = insidersAll.reduce(
+      (sum, h) => sum + (h.pct || 0),
+      0
+    );
+
+    const largestInsider = insidersAll.length ? insidersAll[0] : null;
+
+    let insiderRiskLevel = "low";
+    let insiderNote = "";
+
+    if (!insidersAll.length) {
+      insiderRiskLevel = "low";
+      insiderNote =
+        "No non-LP wallet holds more than 1% of supply. Insider risk looks low based on distribution.";
+    } else if (insidersTotalPct <= 20 && whales.length <= 1) {
+      insiderRiskLevel = "medium";
+      insiderNote =
+        `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
+          1
+        )}% of supply). Some concentrated holders but not extreme.`;
+    } else {
+      insiderRiskLevel = "high";
+      insiderNote =
+        `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
+          1
+        )}% of supply). This is a strong insider/whale cluster.`;
+    }
+
+    const insiderSummary = {
+      insiderCount: insidersAll.length,   // # wallets >=1%
+      whaleCount: whales.length,         // # wallets >=5%
+      insidersTotalPct,                  // % of supply (ex-LP) they control
+      largestInsider,                    // top insider wallet (if any)
+      riskLevel: insiderRiskLevel,       // low / medium / high
+      note: insiderNote,                 // human-readable summary
+    };
+
     const effectiveHoldersCount =
       holdersCount != null ? holdersCount : allHolders.length;
 
@@ -661,6 +711,7 @@ export default async function handler(req, res) {
       mintAuthority,
       freezeAuthority,
       holderSummary,
+      insiderSummary,
       originHint,
       riskSummary,
       tokenMetrics,
