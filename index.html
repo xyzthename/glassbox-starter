@@ -866,4 +866,707 @@
         </div>
 
         <div class="preset-row">
-          <div class="prese
+          <div class="preset-badge" data-mint="AEcNZyMm3dTwWWwyn2wKK4rzCxE3F2iYrMaWvfpu">
+            <span class="dot rug"></span>
+            BULL · Safe
+          </div>
+          <div class="preset-badge" data-mint="6H1VukQgCqpvCEXzBLsVAmgeGMhG8QWLtmdXKc8abonk">
+            <span class="dot rug"></span>
+            2 · Safe
+          </div>
+          <div class="preset-badge" data-mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v">
+            <span class="dot usdc"></span>
+            USDC · Safe
+          </div>
+          <div class="preset-badge" data-mint="Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB">
+            <span class="dot usdc"></span>
+            USDT · Safe
+          </div>
+          <div class="preset-badge" data-mint="2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo">
+            <span class="dot usdc"></span>
+            PYUSD · Safe
+          </div>
+          <div class="preset-badge" data-mint="AEAc2MRKhBgLukVkm6SYjt2Bz3khn8uWmYDMGZqT1EARLY">
+            <span class="dot early"></span>
+            EARLY · Safe
+          </div>
+          <div class="preset-badge" data-mint="5Bq4QQm5y9YUhJtZb8tKmVC3V6bH7UTtR7gpz4qKVWAVWA">
+            <span class="dot vwa"></span>
+            VWA · Safe
+          </div>
+        </div>
+
+        <div id="error-container" style="display:none;"></div>
+
+        <div class="small-footer">
+          <span>Built for degen safety by @yourhandle</span>
+          <span>
+            <span style="opacity:0.8;">Powered by</span>
+            <strong>Helius</strong> &amp; <strong>DexScreener</strong>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-inner" id="result-card">
+        <div id="result-loading" style="display:none;">
+          <div class="result-header">
+            <div class="result-title-area">
+              <div class="token-title">
+                <span class="skeleton" style="width:120px; height:14px; border-radius:999px;"></span>
+              </div>
+              <div class="token-subtitle">
+                <span class="skeleton" style="width:240px; height:11px; border-radius:999px;"></span>
+              </div>
+            </div>
+            <div class="score-pill">
+              <div class="score-pill-label">
+                <span class="dot"></span>
+                Live on-chain scan
+              </div>
+              <div class="score-pill-main">
+                <span class="skeleton" style="width:48px; height:22px; border-radius:999px;"></span>
+              </div>
+              <div class="scam-score-bar" style="margin-top:5px;">
+                <div class="scam-score-fill" style="width:40%; opacity:0.4;"></div>
+                <div class="scam-score-backdrop"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="result-empty">
+          <div class="result-header">
+            <div class="result-title-area">
+              <div class="token-title">
+                <span>Paste a Solana token mint.</span>
+              </div>
+              <div class="token-subtitle">
+                See if it’s mint-side clean or toxic in seconds.
+              </div>
+            </div>
+            <div class="score-pill">
+              <div class="score-pill-label">
+                <span class="dot"></span>
+                Low rug risk (mint side)
+              </div>
+              <div class="score-pill-main">
+                <span class="score">—</span>
+                <span class="sub">/ 100</span>
+              </div>
+              <div class="scam-score-bar" style="margin-top:5px;">
+                <div class="scam-score-fill" style="width:0%;"></div>
+                <div class="scam-score-backdrop"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="result-grid">
+            <div>
+              <div class="result-section">
+                <h3>Mint & Freeze controls</h3>
+                <div class="result-row">
+                  <span class="result-label">Mint authority</span>
+                  <span class="badge badge-soft">
+                    <span class="dot"></span>
+                    Unknown
+                  </span>
+                </div>
+                <div class="result-row">
+                  <span class="result-label">Freeze authority</span>
+                  <span class="badge badge-soft">
+                    <span class="dot"></span>
+                    Unknown
+                  </span>
+                </div>
+                <div class="result-small">
+                  We’ll show whether more supply can be printed and if accounts can be frozen.
+                </div>
+              </div>
+
+              <div class="result-section">
+                <h3>Origin signal</h3>
+                <div class="origin-tag">
+                  <span class="dot"></span>
+                  Unknown protocol / origin
+                </div>
+                <div class="origin-detail" style="margin-top:6px;">
+                  We’ll try to detect whether this mint came from a known protocol (Pump, Bags,
+                  Raydium, Moonshot, etc) or a custom deployment.
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="result-section">
+                <h3>Price, liquidity & age</h3>
+                <div class="metric-row">
+                  <div class="metric-pill">
+                    <div class="metric-label">Price</div>
+                    <div class="metric-value">—</div>
+                  </div>
+                  <div class="metric-pill">
+                    <div class="metric-label">Liquidity</div>
+                    <div class="metric-value">—</div>
+                  </div>
+                  <div class="metric-pill">
+                    <div class="metric-label">Total Supply</div>
+                    <div class="metric-value">—</div>
+                  </div>
+                  <div class="metric-pill">
+                    <div class="metric-label">24h DEX fees (est.)</div>
+                    <div class="metric-value">—</div>
+                  </div>
+                  <div class="metric-pill">
+                    <div class="metric-label">Token Age</div>
+                    <div class="metric-value">—</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="result-section">
+                <h3>Holder risk</h3>
+                <div class="result-row">
+                  <span class="result-label">Top 10 wallets</span>
+                  <span class="badge badge-soft">Unknown</span>
+                </div>
+                <div class="holders-bar">
+                  <div class="holders-bar-fill" style="width:0%;"></div>
+                </div>
+                <div class="result-small">
+                  We’ll show how concentrated supply is among the largest wallets.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="result-section">
+            <h3>
+              Origin signal
+              <span class="sub-label">Tools</span>
+            </h3>
+            <div class="origin-tools-row">
+              <span class="pill-secondary">
+                <span class="icon">📈</span> DexScreener
+              </span>
+              <span class="pill-secondary">
+                <span class="icon">🧠</span> Axiom
+              </span>
+              <span class="pill-secondary">
+                <span class="icon">🤖</span> BullX Bot
+              </span>
+              <span class="pill-secondary">
+                <span class="icon">🪙</span> Padre
+              </span>
+              <span class="pill-secondary">
+                <span class="icon">🔍</span> Photon
+              </span>
+              <span class="pill-secondary">
+                <span class="icon">🧬</span> StalkFun
+              </span>
+            </div>
+            <div class="origin-detail">
+              These are your referral links. Using them supports GlassBox at no extra cost to the
+              user.
+            </div>
+
+            <div class="jumbo-button-row">
+              <a
+                class="jumbo-button"
+                href="https://jup.ag"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <button class="secondary">
+                  <span>Swap on Jupiter</span>
+                </button>
+              </a>
+              <button class="secondary" id="copy-mint-btn" disabled>
+                Copy mint
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="result-main" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "/api/check";
+
+    function formatUsd(n) {
+      if (n == null || Number.isNaN(n)) return "N/A";
+      if (Math.abs(n) < 0.01) return "$" + n.toFixed(5);
+      if (Math.abs(n) < 1) return "$" + n.toFixed(4);
+      if (Math.abs(n) < 1000) return "$" + n.toFixed(3);
+      if (Math.abs(n) < 100000) return "$" + n.toFixed(2);
+      if (Math.abs(n) < 1000000) return "$" + n.toFixed(1);
+      if (Math.abs(n) < 1000000000) return "$" + (n / 1_000_000).toFixed(2) + "M";
+      return "$" + (n / 1_000_000_000).toFixed(2) + "B";
+    }
+
+    function formatNumber(n) {
+      if (n == null || Number.isNaN(n)) return "N/A";
+      if (Math.abs(n) < 0.0001) return n.toFixed(8);
+      if (Math.abs(n) < 0.01) return n.toFixed(6);
+      if (Math.abs(n) < 1) return n.toFixed(4);
+      if (Math.abs(n) < 1000) return n.toFixed(2);
+      if (Math.abs(n) < 1000000) return n.toFixed(1);
+      if (Math.abs(n) < 1000000000) return (n / 1_000_000).toFixed(2) + "M";
+      return (n / 1_000_000_000).toFixed(2) + "B";
+    }
+
+    function shortAddr(addr) {
+      if (!addr) return "";
+      if (addr.length <= 10) return addr;
+      return addr.slice(0, 4) + "…" + addr.slice(-4);
+    }
+
+    function formatAge(tokenAge) {
+      const days = tokenAge?.ageDays ?? null;
+      if (days == null || Number.isNaN(days)) {
+        return { main: "N/A", sub: "" };
+      }
+
+      const daysRounded = Math.floor(days);
+      if (days < 1) {
+        const hours = Math.floor(days * 24);
+        if (hours < 1) {
+          const mins = Math.floor(days * 24 * 60);
+          return { main: `${mins}m`, sub: "Under 1 hour old" };
+        }
+        return { main: `${hours}h`, sub: "Under 1 day old" };
+      }
+
+      if (days < 60) {
+        return { main: `${daysRounded}d`, sub: `≈ ${daysRounded} days old` };
+      }
+
+      const months = days / 30.4375;
+      if (months < 24) {
+        const mRounded = Math.floor(months);
+        return { main: `${mRounded}m`, sub: `≈ ${mRounded} months old` };
+      }
+
+      const years = days / 365.25;
+      const yRounded = years.toFixed(1);
+      return { main: `${yRounded}y`, sub: `≈ ${yRounded} years old` };
+    }
+
+    function setLoading(isLoading) {
+      const btn = document.getElementById("scan-button");
+      const btnLabel = document.getElementById("scan-button-label");
+      const spinner = document.getElementById("scan-button-spinner");
+      const errorContainer = document.getElementById("error-container");
+      const resultEmpty = document.getElementById("result-empty");
+      const resultMain = document.getElementById("result-main");
+      const loadingSkeleton = document.getElementById("result-loading");
+
+      if (isLoading) {
+        btn.disabled = true;
+        btnLabel.textContent = "Scanning...";
+        spinner.style.display = "inline-block";
+        errorContainer.style.display = "none";
+        resultEmpty.style.display = "none";
+        resultMain.style.display = "none";
+        loadingSkeleton.style.display = "block";
+      } else {
+        btn.disabled = false;
+        btnLabel.textContent = "Scan";
+        spinner.style.display = "none";
+        loadingSkeleton.style.display = "none";
+      }
+    }
+
+    function showError(message) {
+      const errorContainer = document.getElementById("error-container");
+      errorContainer.innerHTML = `<div class="error-box">${message}</div>`;
+      errorContainer.style.display = "block";
+    }
+
+    function clearError() {
+      const errorContainer = document.getElementById("error-container");
+      errorContainer.style.display = "none";
+      errorContainer.innerHTML = "";
+    }
+
+    function renderResult(data, mint) {
+      const resultEmpty = document.getElementById("result-empty");
+      const resultMain = document.getElementById("result-main");
+      const copyBtn = document.getElementById("copy-mint-btn");
+
+      resultEmpty.style.display = "none";
+      resultMain.style.display = "block";
+
+      copyBtn.disabled = false;
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(mint).catch(() => {});
+      };
+
+      const {
+        tokenMeta,
+        mintInfo,
+        mintAuthority,
+        freezeAuthority,
+        holderSummary,
+        originHint,
+        riskSummary,
+        tokenMetrics,
+        tokenAge,
+      } = data;
+
+      const name = tokenMeta?.name || "Unknown token";
+      const symbol = tokenMeta?.symbol || "";
+      const logoURI = tokenMeta?.logoURI || null;
+      const originText = originHint?.label || "Unknown protocol / origin";
+      const originDetail = originHint?.detail || "";
+      const riskBlurb = riskSummary?.blurb || "";
+      const scamScore = riskSummary?.score ?? 50;
+      const scamScoreClamped = Math.min(100, Math.max(0, scamScore));
+      const scamScoreScale = scamScoreClamped / 100;
+
+      const dexFeesUsd24h = tokenMetrics?.dexFeesUsd24h ?? null;
+
+      const rawSupply = mintInfo?.supply;
+      const decimals = mintInfo?.decimals ?? 0;
+      const supplyHuman =
+        rawSupply != null
+          ? Number(rawSupply) / Math.pow(10, decimals || 0)
+          : null;
+
+      const holdersTop10 = holderSummary?.top10PctExcludingLP ?? null;
+      const holdersBarWidth =
+        holdersTop10 != null
+          ? Math.min(100, Math.max(0, holdersTop10))
+          : 0;
+      const topHolders = holderSummary?.topHolders || [];
+      const lpHolder = holderSummary?.lpHolder || null;
+      const topHoldersExcludingLP = holderSummary?.topHoldersExcludingLP || [];
+
+      const holdersLabel =
+        holdersTop10 != null
+          ? `${holdersTop10.toFixed(1)}% held by top 10 wallets`
+          : "No holder data";
+
+      const tokenPrice = tokenMetrics?.priceUsd ?? null;
+      const tokenLiquidity = tokenMetrics?.liquidityUsd ?? null;
+
+      const ageFmt = formatAge(tokenAge);
+
+      const holdersListHtml = topHolders.length
+        ? `<div class="holders-list">
+              ${topHolders
+                .map((h, idx) => {
+                  const rank = String(idx + 1).padStart(2, "0");
+                  const isLp = lpHolder && lpHolder.address === h.address;
+                  const label = `${rank}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%${isLp ? " 💧" : ""}`;
+                  return `<a class="holder-chip" href="https://s...account/${h.address}" target="_blank" rel="noopener noreferrer">
+                      ${label}
+                    </a>`;
+                })
+                .join("")}
+            </div>`
+        : `<div class="result-small" style="margin-top:4px;">
+              Holder list not available for this mint yet.
+            </div>`;
+
+      const canMintMore = !!mintAuthority;
+      const canFreeze = !!freezeAuthority;
+
+      const resultHtml = `
+        <div class="result-header">
+          <div class="result-title-area">
+            <div class="token-title">
+              ${logoURI ? `<img src="${logoURI}" alt="" style="width:20px; height:20px; border-radius:999px; object-fit:cover; border:1px solid rgba(148,163,184,0.4); box-shadow:0 0 0 1px rgba(15,23,42,0.9);"/>` : ""}
+              <span>${name}</span>
+              ${symbol ? `<span class="symbol-pill">${symbol}</span>` : ""}
+            </div>
+            <div class="token-subtitle">
+              <code>${mint}</code>
+              <span class="badge-live">
+                <span class="dot"></span>
+                Live on-chain scan
+              </span>
+            </div>
+          </div>
+          <div class="score-pill">
+            <div class="score-pill-label">
+              <span class="dot"></span>
+              ${riskSummary?.level === "low"
+                ? "Low rug risk (mint side)"
+                : riskSummary?.level === "medium"
+                ? "Medium rug risk (mint side)"
+                : "High rug risk (mint side)"}
+            </div>
+            <div class="score-pill-main">
+              <span class="score">${scamScoreClamped}</span>
+              <span class="sub">/ 100</span>
+            </div>
+            <div class="scam-score-bar" style="margin-top:5px;">
+              <div class="scam-score-fill" style="width:${scamScoreScale * 100}%;"></div>
+              <div class="scam-score-backdrop"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-grid">
+          <div>
+            <div class="result-section">
+              <h3>Mint & Freeze controls</h3>
+              <div class="result-row">
+                <span class="result-label">Mint authority</span>
+                <span class="badge ${
+                  !mintAuthority ? "badge-good" : "badge-bad"
+                }">
+                  <span class="dot"></span>
+                  ${!mintAuthority ? "Renounced / Disabled" : "Still enabled"}
+                </span>
+              </div>
+              <div class="result-row">
+                <span class="result-label">Freeze authority</span>
+                <span class="badge ${
+                  !freezeAuthority ? "badge-good" : "badge-warn"
+                }">
+                  <span class="dot"></span>
+                  ${!freezeAuthority ? "None" : "Can freeze accounts"}
+                </span>
+              </div>
+              <div class="result-small">
+                ${
+                  canMintMore
+                    ? "Dev can still print new tokens into their own wallets or LP."
+                    : "No more supply can be minted from this mint authority."
+                }
+              </div>
+            </div>
+
+            <div class="result-section">
+              <h3>Origin signal</h3>
+              <div class="origin-tag">
+                <span class="dot"></span>
+                ${originText}
+              </div>
+              <div class="origin-detail">
+                ${originDetail || "Origin hints help you see whether this came from a known protocol (Pump, Bags, Raydium, Moonshot, etc) or a custom deployment."}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="result-section">
+              <h3>Price, liquidity & age</h3>
+              <div class="metric-row">
+                <div class="metric-pill">
+                  <div class="metric-label">Price</div>
+                  <div class="metric-value">${formatUsd(tokenPrice)}</div>
+                </div>
+                <div class="metric-pill">
+                  <div class="metric-label">Liquidity</div>
+                  <div class="metric-value">${formatUsd(tokenLiquidity)}</div>
+                </div>
+                <div class="metric-pill">
+                  <div class="metric-label">Total Supply</div>
+                  <div class="metric-value">${
+                    supplyHuman != null ? formatNumber(supplyHuman) : "—"
+                  }</div>
+                </div>
+                <div class="metric-pill">
+                  <div class="metric-label">24h DEX fees (est.)</div>
+                  <div class="metric-value">${formatUsd(dexFeesUsd24h)}</div>
+                </div>
+                <div class="metric-pill">
+                  <div class="metric-label">Token Age</div>
+                  <div class="metric-value">${ageFmt.main}</div>
+                  ${
+                    ageFmt.sub
+                      ? `<div class="metric-sub">${ageFmt.sub}</div>`
+                      : ""
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div class="result-section">
+              <h3>Holder risk</h3>
+              <div class="result-row">
+                <span class="result-label">Top 10 wallets</span>
+                <span class="badge ${
+                  holdersTop10 != null && holdersTop10 <= 25
+                    ? "badge-good"
+                    : holdersTop10 != null && holdersTop10 <= 60
+                    ? "badge-warn"
+                    : "badge-bad"
+                }">
+                  ${
+                    holdersTop10 != null
+                      ? `${holdersTop10.toFixed(1)}%`
+                      : "Unknown"
+                  }
+                </span>
+              </div>
+              <div class="holders-bar">
+                <div class="holders-bar-fill" style="width:${holdersBarWidth}%;"></div>
+              </div>
+              <div class="result-small">${holdersLabel}</div>
+              ${holdersListHtml}
+            </div>
+          </div>
+        </div>
+
+        <div class="result-section">
+          <h3>
+            Origin signal
+            <span class="sub-label">Tools</span>
+          </h3>
+          <div class="origin-tools-row">
+            <a
+              class="tool-pill"
+              href="https://dexscreener.com/solana/${mint}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="icon">📈</span>
+              DexScreener
+            </a>
+            <a
+              class="tool-pill"
+              href="https://axiom.trade/meme/${mint}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="icon">🧠</span>
+              Axiom
+            </a>
+            <a
+              class="tool-pill"
+              href="https://t.me/BullXsniper_bot?start=ref_glassbox_${mint}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="icon">🤖</span>
+              BullX Bot
+            </a>
+            <a
+              class="tool-pill"
+              href="https://t.me/PadreSniperBot?start=ref_glassbox_${mint}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="icon">🪙</span>
+              Padre
+            </a>
+            <a
+              class="tool-pill"
+              href="https://photon-sol.tinyastro.io/en/lp/${mint}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="icon">🔍</span>
+              Photon
+            </a>
+            <a
+              class="tool-pill"
+              href="https://stalkfun.com/token/${mint}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="icon">🧬</span>
+              StalkFun
+            </a>
+          </div>
+          <div class="origin-detail">
+            These are your referral links. Using them supports GlassBox at no extra cost to the
+            user.
+          </div>
+
+          <div class="jumbo-button-row">
+            <a
+              class="jumbo-button"
+              href="https://jup.ag/swap/SOL-${mint}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <button class="secondary">
+                <span>Swap on Jupiter</span>
+              </button>
+            </a>
+            <button class="secondary" id="copy-mint-btn-inline">
+              Copy mint
+            </button>
+          </div>
+        </div>
+      `;
+
+      resultMain.innerHTML = resultHtml;
+
+      const inlineCopy = document.getElementById("copy-mint-btn-inline");
+      if (inlineCopy) {
+        inlineCopy.onclick = () => {
+          navigator.clipboard.writeText(mint).catch(() => {});
+        };
+      }
+    }
+
+    async function handleScan(event) {
+      event.preventDefault();
+      clearError();
+
+      const input = document.getElementById("mint-input");
+      const mint = input.value.trim();
+
+      if (!mint) {
+        showError("Please paste a Solana token mint address first.");
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const res = await fetch(`${API_URL}?mint=${encodeURIComponent(mint)}`);
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        renderResult(data, mint);
+      } catch (err) {
+        console.error(err);
+        showError(err.message || "Something went wrong while scanning this mint.");
+        const resultEmpty = document.getElementById("result-empty");
+        const resultMain = document.getElementById("result-main");
+        resultEmpty.style.display = "block";
+        resultMain.style.display = "none";
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    document.getElementById("scan-form").addEventListener("submit", handleScan);
+
+    document.querySelectorAll(".preset-badge").forEach((el) => {
+      el.addEventListener("click", () => {
+        const mint = el.getAttribute("data-mint");
+        const input = document.getElementById("mint-input");
+        input.value = mint;
+        const event = new Event("submit", { cancelable: true });
+        document.getElementById("scan-form").dispatchEvent(event);
+      });
+    });
+  </script>
+
+  <footer>
+    <span>
+      GlassBox Pro (degen alerts &amp; MEV shield) coming soon.
+    </span>
+    <span>
+      <a href="https://x.com" target="_blank" rel="noopener noreferrer">@yourhandle on X</a>
+    </span>
+  </footer>
+</body>
+</html>
