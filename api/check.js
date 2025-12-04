@@ -118,6 +118,40 @@ async function safeGetLargestAccounts(mint) {
   }
 }
 
+// Count unique wallets holding a non-zero balance of this mint
+async function safeCountTokenHolders(mint) {
+  try {
+    const result = await heliusRpc("getTokenAccountsByMint", [
+      mint,
+      {
+        commitment: "processed",
+        encoding: "jsonParsed",
+      },
+    ]);
+
+    const accounts = result?.value || [];
+    const owners = new Set();
+
+    for (const acc of accounts) {
+      const parsed = acc.account?.data?.parsed;
+      const info = parsed?.info;
+      if (!info) continue;
+
+      const owner = info.owner;
+      const uiAmount = info.tokenAmount?.uiAmount ?? 0;
+
+      if (!owner || !uiAmount || uiAmount <= 0) continue;
+      owners.add(owner);
+    }
+
+    return owners.size;
+  } catch (e) {
+    console.error("safeCountTokenHolders error for mint", mint, e?.message);
+    // If this fails, we just won't show holdersCount instead of breaking API
+    return null;
+  }
+}
+
 /**
  * DexScreener helper:
  *  - GET /token-pairs/v1/solana/{tokenAddress}
@@ -309,36 +343,6 @@ async function fetchDexAndAgeStatsFallback(mint) {
 // ---------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------
-// Count unique wallet addresses that hold a non-zero balance of this mint
-async function countTokenHolders(mint) {
-  try {
-    const result = await heliusRpc("getTokenAccountsByMint", [
-      mint,
-      { commitment: "processed", encoding: "jsonParsed" },
-    ]);
-
-    const accounts = result?.value || [];
-    const owners = new Set();
-
-    for (const acc of accounts) {
-      const parsed = acc.account?.data?.parsed;
-      const info = parsed?.info;
-      if (!info) continue;
-
-      const owner = info.owner;
-      const uiAmount = info.tokenAmount?.uiAmount ?? 0;
-
-      // ignore empty / dust accounts
-      if (!owner || !uiAmount || uiAmount <= 0) continue;
-      owners.add(owner);
-    }
-
-    return owners.size;
-  } catch (e) {
-    console.error("countTokenHolders error for mint", mint, e?.message);
-    return null; // don't break the API if this fails
-  }
-}
 
 export default async function handler(req, res) {
   try {
@@ -367,30 +371,23 @@ export default async function handler(req, res) {
     // 2) Metadata
     const assetPromise = safeGetAsset(mint);
 
-    // 3) Largest accounts (holders)
+    // 3) Largest accounts (holders, top 20)
     const largestPromise = safeGetLargestAccounts(mint);
 
     // 4) Price / liquidity / age / 24h fees from DexScreener
     const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
 
-    // before
-const [accountInfo, asset, largest, dexStats] = await Promise.all([
-  accountInfoPromise,
-  assetPromise,
-  largestPromise,
-  dexStatsPromise,
-]);
+    // 5) Total unique holders (via getTokenAccountsByMint)
+    const holdersCountPromise = safeCountTokenHolders(mint);
 
-// after
-const holdersCountPromise = countTokenHolders(mint);
-
-const [accountInfo, asset, largest, dexStats, holdersCount] = await Promise.all([
-  accountInfoPromise,
-  assetPromise,
-  largestPromise,
-  dexStatsPromise,
-  holdersCountPromise,
-]);
+    const [accountInfo, asset, largest, dexStats, holdersCount] =
+      await Promise.all([
+        accountInfoPromise,
+        assetPromise,
+        largestPromise,
+        dexStatsPromise,
+        holdersCountPromise,
+      ]);
 
     if (!accountInfo?.value) {
       return res
@@ -520,22 +517,24 @@ const [accountInfo, asset, largest, dexStats, holdersCount] = await Promise.all(
       );
     }
 
+    const effectiveHoldersCount =
+      holdersCount != null ? holdersCount : allHolders.length;
+
     const holderSummary = {
-  // Top 10 including LP (raw concentration)
-  top10Pct,
-  topHolders: top10InclLP,
+      // Top 10 including LP (raw concentration)
+      top10Pct,
+      topHolders: top10InclLP,
 
-  // Top 10 AFTER dropping the LP wallet
-  top10PctExcludingLP,
-  topHoldersExcludingLP: top10ExclLP,
+      // Top 10 AFTER dropping the LP wallet
+      top10PctExcludingLP,
+      topHoldersExcludingLP: top10ExclLP,
 
-  // LP wallet we detected (or null)
-  lpHolder,
+      // LP wallet we detected (or null)
+      lpHolder,
 
-  // NEW: total number of unique wallets holding a non-zero amount
-  holdersCount,
-};
-
+      // Total unique wallets with > 0 balance (or fallback to top-20 count)
+      holdersCount: effectiveHoldersCount,
+    };
 
     // -----------------------------------------------------------------
     // Origin hint
