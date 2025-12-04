@@ -23,6 +23,11 @@ const STABLECOIN_WHITELIST = {
     symbol: "PYUSD",
     name: "PayPal USD (PYUSD)",
   },
+  // USD1 (Solana)
+  "USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB": {
+    symbol: "USD1",
+    name: "World Liberty Financial USD (USD1)",
+  },
 };
 
 async function heliusRpc(method, params) {
