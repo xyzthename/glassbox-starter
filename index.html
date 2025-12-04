@@ -980,6 +980,7 @@
           freezeAuthority,
           mintAuthority,
           holderSummary,
+          insiderSummary,
           originHint,
           riskSummary,
           tokenMetrics,
@@ -1031,7 +1032,22 @@
         const lpHolder = holderSummary?.lpHolder || null;
         const topHolders = holderSummary?.topHolders || [];
         const holdersCount = holderSummary?.holdersCount ?? null;
+                const insiders = insiderSummary || {};
+        const insidersTotalPct = insiders.insidersTotalPct ?? null;
+        const insiderCount = insiders.insiderCount ?? 0;
+        const whaleCount = insiders.whaleCount ?? 0;
+        const largestInsiderPct =
+          insiders.largestInsider?.pct ?? null;
+        const insiderRiskLevel = insiders.riskLevel || "low";
+        const insiderNote = insiders.note || "";
 
+        let insiderBadgeClass = "badge-good";
+        if (insiderRiskLevel === "high") {
+          insiderBadgeClass = "badge-bad";
+        } else if (insiderRiskLevel === "medium") {
+          insiderBadgeClass = "badge-warn";
+        }
+     
         // Use Top 10 excluding LP for the % badge (fallback to old field)
         const holdersTop10 =
           holderSummary?.top10PctExcludingLP != null
@@ -1206,8 +1222,9 @@
               </div>
             </div>
 
-            <div class="result-section">
+                   <div class="result-section">
               <h3>Holder risk</h3>
+
               <div class="result-row">
                 <span class="result-label">Top 10 wallets</span>
                 <span class="badge ${
@@ -1224,13 +1241,34 @@
                   }
                 </span>
               </div>
+
+              <div class="result-row">
+                <span class="result-label">Insider wallets</span>
+                <span class="badge ${insiderBadgeClass}">
+                  ${
+                    insiderCount
+                      ? `${insiderCount} ≥1% holder${
+                          insiderCount > 1 ? "s" : ""
+                        }`
+                      : "Low"
+                  }
+                </span>
+              </div>
+
               <div class="holders-bar">
                 <div class="holders-bar-fill" style="width:${holdersBarWidth}%;"></div>
               </div>
               <div class="result-small">${holdersLabel}</div>
               ${holdersListHtml}
+              <div class="result-small" style="margin-top:4px;">
+                ${
+                  insiderNote
+                    ? insiderNote
+                    : "Based on non-LP distribution only – wallets holding ≥1% are treated as insiders/whales."
+                }
+              </div>
             </div>
-          </div>
+
 
           <div class="result-section">
             <h3>Origin signal</h3>
