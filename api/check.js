@@ -207,6 +207,8 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       ageDays: null,
       dexFeesUsd24h: null,
       poolMintReserve: null,
+      volume24Usd: null,
+      txCount24: null,
     };
   }
 
@@ -266,6 +268,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   let liquidityUsd = null;
   let pairCreatedAt = null;
   let volume24 = null;
+  let txCount24 = null;
   let poolMintReserve = null;
   let dexFeesUsd24h = null;
 
@@ -303,12 +306,26 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     }
   }
 
+  // 24h volume (USD)
   if (selectedPair && selectedPair.volume && typeof selectedPair.volume === "object") {
     const v24 = selectedPair.volume.h24;
     if (v24 != null) {
       const n24 = Number(v24);
       if (!Number.isNaN(n24)) {
         volume24 = n24;
+      }
+    }
+  }
+
+  // 24h trades (buys + sells) – used for fake-liquidity detection
+  if (selectedPair && selectedPair.txns && typeof selectedPair.txns === "object") {
+    const t24 = selectedPair.txns.h24;
+    if (t24) {
+      const buys = Number(t24.buys || 0);
+      const sells = Number(t24.sells || 0);
+      const total = buys + sells;
+      if (!Number.isNaN(total) && total > 0) {
+        txCount24 = total;
       }
     }
   }
@@ -343,24 +360,9 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     ageDays,
     dexFeesUsd24h,
     poolMintReserve,
+    volume24Usd: volume24,
+    txCount24,
   };
-}
-
-// Simple fallback if DexScreener is down
-async function fetchDexAndAgeStatsFallback(mint) {
-  try {
-    const res = await fetchDexAndAgeStatsFromDexScreener(mint);
-    return res;
-  } catch (e) {
-    console.error("Dex/Age stats fallback error for mint", mint, e?.message);
-    return {
-      priceUsd: null,
-      liquidityUsd: null,
-      ageDays: null,
-      dexFeesUsd24h: null,
-      poolMintReserve: null,
-    };
-  }
 }
 
 // ---------------------------------------------------------------------
@@ -398,7 +400,19 @@ export default async function handler(req, res) {
     const largestPromise = safeGetLargestAccounts(mint);
 
     // 4) Price / liquidity / age / 24h fees from DexScreener
-    const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
+    const dexStatsPromise = fetchDexAndAgeStatsFallback(mint)} catch (e) {
+    console.error("Dex/Age stats fallback error for mint", mint, e?.message);
+    return {
+      priceUsd: null,
+      liquidityUsd: null,
+      ageDays: null,
+      dexFeesUsd24h: null,
+      poolMintReserve: null,
+      volume24Usd: null,
+      txCount24: null,
+    };
+  }
+};
 
     // 5) Total unique holders (via getTokenAccountsByMint)
     const holdersCountPromise = safeCountTokenHolders(mint);
@@ -677,6 +691,68 @@ export default async function handler(req, res) {
         : { ageDays: null };
 
     // -----------------------------------------------------------------
+    // Liquidity truth index (fake-liquidity suspicion)
+    // -----------------------------------------------------------------
+    const liqUsd = dexStats.liquidityUsd;
+    const vol24 = dexStats.volume24Usd ?? null;
+    const txCount24 = dexStats.txCount24 ?? null;
+
+    let liqTruthLevel = "unknown";
+    let liqTruthLabel = "Unknown";
+    let liqTruthNote =
+      "Not enough DEX data to judge whether liquidity is real or spoofed.";
+    let tradeToLiquidity = null;
+    let avgTradeUsd = null;
+
+    if (
+      liqUsd != null &&
+      !Number.isNaN(liqUsd) &&
+      liqUsd > 0 &&
+      vol24 != null &&
+      !Number.isNaN(vol24) &&
+      vol24 > 0 &&
+      txCount24 != null &&
+      !Number.isNaN(txCount24) &&
+      txCount24 > 0
+    ) {
+      tradeToLiquidity = vol24 / liqUsd; // how many times liquidity churned in 24h
+      avgTradeUsd = vol24 / txCount24;
+
+      // Heuristic:
+      // - very high volume vs liquidity + few trades  → likely wash / fake
+      // - moderate volume vs liquidity + modest trades → suspicious
+      // - otherwise → mostly real
+      if (tradeToLiquidity > 100 && txCount24 < 50) {
+        liqTruthLevel = "high";
+        liqTruthLabel = "Likely fake / wash";
+        liqTruthNote =
+          "24h volume is extremely high versus liquidity with very few trades. This pattern often indicates wash trading or spoofed volume.";
+      } else if (tradeToLiquidity > 30 && txCount24 < 150) {
+        liqTruthLevel = "medium";
+        liqTruthLabel = "Suspicious";
+        liqTruthNote =
+          "24h volume is large relative to liquidity, but trade count is modest. Liquidity may be partially fake or heavily farmed.";
+      } else {
+        liqTruthLevel = "low";
+        liqTruthLabel = "Mostly real";
+        liqTruthNote =
+          "Volume and trade count look consistent with liquidity size. No obvious fake-liquidity pattern detected.";
+      }
+    }
+
+    const liquidityTruth = {
+      level: liqTruthLevel,          // low / medium / high / unknown
+      label: liqTruthLabel,          // short label for UI
+      note: liqTruthNote,            // human-readable explanation
+      volume24Usd: vol24,           // raw 24h volume
+      txCount24,                    // # trades (buys + sells)
+      tradeToLiquidity,             // volume / liquidity ratio
+      avgTradeUsd,                  // average trade size
+    };
+
+    
+
+    // -----------------------------------------------------------------
     // Stablecoin special handling (whitelist)
     // -----------------------------------------------------------------
     const stableConfig = STABLECOIN_WHITELIST[mint];
@@ -721,6 +797,7 @@ export default async function handler(req, res) {
       riskSummary,
       tokenMetrics,
       tokenAge,
+      liquidityTruth,
     });
   } catch (err) {
     console.error("API /api/check error:", err);
