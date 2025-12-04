@@ -1019,7 +1019,7 @@
 
         const priceUsd = tokenMetrics?.priceUsd ?? null;
         const liquidityUsd = tokenMetrics?.liquidityUsd ?? null;
-        const dexFeesUsd24h = tokenMetrics?.dexFeesUsd24h ?? null; // NEW
+        const dexFeesUsd24h = tokenMetrics?.dexFeesUsd24h ?? null; // still computed, not displayed
 
         const rawSupply = mintInfo?.supply;
         const decimals = mintInfo?.decimals ?? 0;
@@ -1030,6 +1030,7 @@
 
         const lpHolder = holderSummary?.lpHolder || null;
         const topHolders = holderSummary?.topHolders || [];
+        const holdersCount = holderSummary?.holdersCount ?? null;
 
         // Use Top 10 excluding LP for the % badge (fallback to old field)
         const holdersTop10 =
@@ -1159,8 +1160,14 @@
               }</div>
             </div>
             <div class="metric-pill">
-              <div class="metric-label">24h DEX fees (est.)</div>
-              <div class="metric-value">${formatUsd(dexFeesUsd24h)}</div>
+              <div class="metric-label">Holders</div>
+              <div class="metric-value">
+                ${
+                  holdersCount != null
+                    ? formatNumber(holdersCount)
+                    : "—"
+                }
+              </div>
             </div>
             <div class="metric-pill">
               <div class="metric-label">Token Age</div>
