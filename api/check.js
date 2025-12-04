@@ -9,7 +9,7 @@ const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 // Known Solana stablecoins (whitelist)
 const STABLECOIN_WHITELIST = {
   // USDC
-  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1": {
     symbol: "USDC",
     name: "USD Coin (USDC)",
   },
