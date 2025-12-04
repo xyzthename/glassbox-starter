@@ -1222,9 +1222,10 @@
               </div>
             </div>
 
-                   <div class="result-section">
+                              <div class="result-section">
               <h3>Holder risk</h3>
 
+              <!-- Top 10 wallets badge -->
               <div class="result-row">
                 <span class="result-label">Top 10 wallets</span>
                 <span class="badge ${
@@ -1242,6 +1243,7 @@
                 </span>
               </div>
 
+              <!-- Insider wallets badge with tooltip -->
               <div class="result-row">
                 <span class="result-label">Insider wallets</span>
                 <span
@@ -1254,16 +1256,26 @@
                 >
                   ${
                     insiderCount
-                      ? `${insiderCount} ≥1% holder${insiderCount > 1 ? "s" : ""}`
+                      ? `${insiderCount} ≥1% holder${
+                          insiderCount > 1 ? "s" : ""
+                        }`
                       : "Low"
                   }
                 </span>
-
-              <div class="holders-bar">
-                <div class="holders-bar-fill" style="width:${holdersBarWidth}%;"></div>
               </div>
+
+              <!-- Bar + text + chips -->
+              <div class="holders-bar">
+                <div
+                  class="holders-bar-fill"
+                  style="width:${holdersBarWidth}%;"
+                ></div>
+              </div>
+
               <div class="result-small">${holdersLabel}</div>
+
               ${holdersListHtml}
+
               <div class="result-small" style="margin-top:4px;">
                 ${
                   insiderNote
@@ -1273,19 +1285,6 @@
               </div>
             </div>
 
-
-          <div class="result-section">
-            <h3>Origin signal</h3>
-            <div class="origin-row">
-              <strong>${originText}</strong>${
-          originDetail ? ` · ${originDetail}` : ""
-        }
-            </div>
-            <div class="result-small">
-              Origin hints help you see whether this came from a known protocol (Pump, Bags,
-              Raydium, Moonshot, etc.) or a custom deployment.
-            </div>
-          </div>
 
           <div class="result-section">
             <h3>Tools</h3>
