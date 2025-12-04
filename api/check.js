@@ -9,12 +9,12 @@ const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 // Known Solana stablecoins (whitelist)
 const STABLECOIN_WHITELIST = {
   // USDC
-  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: {
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
     symbol: "USDC",
     name: "USD Coin (USDC)",
   },
   // USDT
-  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: {
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": {
     symbol: "USDT",
     name: "Tether USD (USDT)",
   },
@@ -174,7 +174,6 @@ async function safeCountTokenHolders(mint) {
   }
 }
 
-
 /**
  * DexScreener helper:
  *  - GET /token-pairs/v1/solana/{tokenAddress}
@@ -184,6 +183,8 @@ async function safeCountTokenHolders(mint) {
  *      ageDays          -> pairCreatedAt -> days
  *      dexFeesUsd24h    -> ~24h DEX trading fees in USD (0.3% of h24 volume)
  *      poolMintReserve  -> token amount in the main pool (for LP detection)
+ *      volume24Usd      -> 24h volume in USD
+ *      txCount24        -> 24h trades count (buys + sells)
  */
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
@@ -307,7 +308,11 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   }
 
   // 24h volume (USD)
-  if (selectedPair && selectedPair.volume && typeof selectedPair.volume === "object") {
+  if (
+    selectedPair &&
+    selectedPair.volume &&
+    typeof selectedPair.volume === "object"
+  ) {
     const v24 = selectedPair.volume.h24;
     if (v24 != null) {
       const n24 = Number(v24);
@@ -365,6 +370,25 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   };
 }
 
+// Simple fallback if DexScreener is down
+async function fetchDexAndAgeStatsFallback(mint) {
+  try {
+    const res = await fetchDexAndAgeStatsFromDexScreener(mint);
+    return res;
+  } catch (e) {
+    console.error("Dex/Age stats fallback error for mint", mint, e?.message);
+    return {
+      priceUsd: null,
+      liquidityUsd: null,
+      ageDays: null,
+      dexFeesUsd24h: null,
+      poolMintReserve: null,
+      volume24Usd: null,
+      txCount24: null,
+    };
+  }
+}
+
 // ---------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------
@@ -400,19 +424,7 @@ export default async function handler(req, res) {
     const largestPromise = safeGetLargestAccounts(mint);
 
     // 4) Price / liquidity / age / 24h fees from DexScreener
-    const dexStatsPromise = fetchDexAndAgeStatsFallback(mint)} catch (e) {
-    console.error("Dex/Age stats fallback error for mint", mint, e?.message);
-    return {
-      priceUsd: null,
-      liquidityUsd: null,
-      ageDays: null,
-      dexFeesUsd24h: null,
-      poolMintReserve: null,
-      volume24Usd: null,
-      txCount24: null,
-    };
-  }
-};
+    const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
 
     // 5) Total unique holders (via getTokenAccountsByMint)
     const holdersCountPromise = safeCountTokenHolders(mint);
@@ -554,11 +566,11 @@ export default async function handler(req, res) {
       );
     }
 
-        // ---------------------------------------------------------------
+    // ---------------------------------------------------------------
     // Insider / whale snapshot (non-LP wallets only)
     // ---------------------------------------------------------------
-    const INSIDER_THRESHOLD_PCT = 1;  // wallets >= 1% count as insiders
-    const WHALE_THRESHOLD_PCT = 5;    // wallets >= 5% count as whales
+    const INSIDER_THRESHOLD_PCT = 1; // wallets >= 1% count as insiders
+    const WHALE_THRESHOLD_PCT = 5; // wallets >= 5% count as whales
 
     const insidersAll = nonLpHolders.filter(
       (h) => (h.pct || 0) >= INSIDER_THRESHOLD_PCT
@@ -583,25 +595,23 @@ export default async function handler(req, res) {
         "No non-LP wallet holds more than 1% of supply. Insider risk looks low based on distribution.";
     } else if (insidersTotalPct <= 20 && whales.length <= 1) {
       insiderRiskLevel = "medium";
-      insiderNote =
-        `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
-          1
-        )}% of supply). Some concentrated holders but not extreme.`;
+      insiderNote = `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
+        1
+      )}% of supply). Some concentrated holders but not extreme.`;
     } else {
       insiderRiskLevel = "high";
-      insiderNote =
-        `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
-          1
-        )}% of supply). This is a strong insider/whale cluster.`;
+      insiderNote = `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
+        1
+      )}% of supply). This is a strong insider/whale cluster.`;
     }
 
     const insiderSummary = {
-      insiderCount: insidersAll.length,   // # wallets >=1%
-      whaleCount: whales.length,         // # wallets >=5%
-      insidersTotalPct,                  // % of supply (ex-LP) they control
-      largestInsider,                    // top insider wallet (if any)
-      riskLevel: insiderRiskLevel,       // low / medium / high
-      note: insiderNote,                 // human-readable summary
+      insiderCount: insidersAll.length, // # wallets >=1%
+      whaleCount: whales.length, // # wallets >=5%
+      insidersTotalPct, // % of supply (ex-LP) they control
+      largestInsider, // top insider wallet (if any)
+      riskLevel: insiderRiskLevel, // low / medium / high
+      note: insiderNote, // human-readable summary
     };
 
     const effectiveHoldersCount =
@@ -741,16 +751,14 @@ export default async function handler(req, res) {
     }
 
     const liquidityTruth = {
-      level: liqTruthLevel,          // low / medium / high / unknown
-      label: liqTruthLabel,          // short label for UI
-      note: liqTruthNote,            // human-readable explanation
-      volume24Usd: vol24,           // raw 24h volume
-      txCount24,                    // # trades (buys + sells)
-      tradeToLiquidity,             // volume / liquidity ratio
-      avgTradeUsd,                  // average trade size
+      level: liqTruthLevel, // low / medium / high / unknown
+      label: liqTruthLabel, // short label for UI
+      note: liqTruthNote, // human-readable explanation
+      volume24Usd: vol24, // raw 24h volume
+      txCount24, // # trades (buys + sells)
+      tradeToLiquidity, // volume / liquidity ratio
+      avgTradeUsd, // average trade size
     };
-
-    
 
     // -----------------------------------------------------------------
     // Stablecoin special handling (whitelist)
