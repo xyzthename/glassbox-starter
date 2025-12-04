@@ -121,15 +121,29 @@ async function safeGetLargestAccounts(mint) {
 // Count unique wallets holding a non-zero balance of this mint
 async function safeCountTokenHolders(mint) {
   try {
-    const result = await heliusRpc("getTokenAccountsByMint", [
-      mint,
+    // SPL Token program id
+    const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+    const result = await heliusRpc("getProgramAccounts", [
+      TOKEN_PROGRAM_ID,
       {
         commitment: "processed",
         encoding: "jsonParsed",
+        filters: [
+          // SPL token account size
+          { dataSize: 165 },
+          // Mint field is at offset 0
+          {
+            memcmp: {
+              offset: 0,
+              bytes: mint,
+            },
+          },
+        ],
       },
     ]);
 
-    const accounts = result?.value || [];
+    const accounts = Array.isArray(result) ? result : [];
     const owners = new Set();
 
     for (const acc of accounts) {
@@ -144,6 +158,9 @@ async function safeCountTokenHolders(mint) {
       owners.add(owner);
     }
 
+    // If this is some huge token, avoid blowing things up
+    if (owners.size === 0) return null;
+
     return owners.size;
   } catch (e) {
     console.error("safeCountTokenHolders error for mint", mint, e?.message);
@@ -151,6 +168,7 @@ async function safeCountTokenHolders(mint) {
     return null;
   }
 }
+
 
 /**
  * DexScreener helper:
