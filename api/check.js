@@ -30,6 +30,15 @@ const STABLECOIN_WHITELIST = {
   },
 };
 
+// Known burn / dead owners for SPL token accounts (extend over time)
+const BURN_OWNER_ADDRESSES = new Set([
+  // Solana incinerator
+  "1nc1nerator11111111111111111111111111111111".toLowerCase(),
+  // System program – in practice you won’t usually see this as token account owner,
+  // but keep here as an extra “obvious dead” signal if it ever appears.
+  "11111111111111111111111111111111".toLowerCase(),
+]);
+
 async function heliusRpc(method, params) {
   if (!HELIUS_API_KEY) {
     throw new Error("HELIUS_API_KEY is not set in environment");
@@ -163,14 +172,45 @@ async function safeCountTokenHolders(mint) {
       owners.add(owner);
     }
 
-    // If this is some huge token, avoid blowing things up
     if (owners.size === 0) return null;
-
     return owners.size;
   } catch (e) {
     console.error("safeCountTokenHolders error for mint", mint, e?.message);
     // If this fails, we just won't show holdersCount instead of breaking API
     return null;
+  }
+}
+
+// Get owners for a batch of token accounts
+async function safeGetAccountOwners(addresses) {
+  try {
+    const unique = Array.from(new Set(addresses.filter(Boolean)));
+    if (!unique.length) return {};
+
+    const result = await heliusRpc("getMultipleAccounts", [
+      unique,
+      { encoding: "jsonParsed" },
+    ]);
+
+    const out = {};
+    const values = result?.value || [];
+
+    for (let i = 0; i < values.length; i++) {
+      const addr = unique[i];
+      const acc = values[i];
+      const owner =
+        acc?.data?.parsed?.info?.owner ||
+        acc?.data?.parsed?.info?.ownerProgram ||
+        null;
+      if (addr) {
+        out[addr] = owner || null;
+      }
+    }
+
+    return out;
+  } catch (e) {
+    console.error("safeGetAccountOwners error", e?.message);
+    return {};
   }
 }
 
@@ -488,6 +528,10 @@ export default async function handler(req, res) {
         ? Number(dexStats.poolMintReserve)
         : null;
 
+    // Owners for the top token accounts (so we can see who controls LP)
+    const largestAddresses = largestAccounts.map((e) => e.address).filter(Boolean);
+    const ownersByTokenAccount = await safeGetAccountOwners(largestAddresses);
+
     let lpHolder = null;
     let bestReserveRelDiff = Infinity;
 
@@ -505,8 +549,12 @@ export default async function handler(req, res) {
           ? entry.uiAmount
           : Number(entry.uiAmount ?? 0);
 
+      const tokenAccount = entry.address;
+      const owner = ownersByTokenAccount[tokenAccount] || null;
+
       const holder = {
-        address: entry.address,
+        address: tokenAccount,
+        owner,
         pct,
         uiAmount,
       };
@@ -702,10 +750,12 @@ export default async function handler(req, res) {
 
     // -----------------------------------------------------------------
     // Liquidity truth index (fake-liquidity suspicion)
+    // + age guardrail for super-fresh tokens
     // -----------------------------------------------------------------
     const liqUsd = dexStats.liquidityUsd;
     const vol24 = dexStats.volume24Usd ?? null;
     const txCount24 = dexStats.txCount24 ?? null;
+    const ageDays = dexStats.ageDays ?? null;
 
     let liqTruthLevel = "unknown";
     let liqTruthLabel = "Unknown";
@@ -713,6 +763,17 @@ export default async function handler(req, res) {
       "Not enough DEX data to judge whether liquidity is real or spoofed.";
     let tradeToLiquidity = null;
     let avgTradeUsd = null;
+
+    const isVeryFresh =
+      ageDays != null &&
+      !Number.isNaN(ageDays) &&
+      ageDays >= 0 &&
+      ageDays < 0.02; // ~ <30–45 min
+
+    const tooFewTrades =
+      txCount24 != null && !Number.isNaN(txCount24) && txCount24 < 10;
+
+    const earlyOrThin = isVeryFresh || tooFewTrades;
 
     if (
       liqUsd != null &&
@@ -728,11 +789,12 @@ export default async function handler(req, res) {
       tradeToLiquidity = vol24 / liqUsd; // how many times liquidity churned in 24h
       avgTradeUsd = vol24 / txCount24;
 
-      // Heuristic:
-      // - very high volume vs liquidity + few trades  → likely wash / fake
-      // - moderate volume vs liquidity + modest trades → suspicious
-      // - otherwise → mostly real
-      if (tradeToLiquidity > 100 && txCount24 < 50) {
+      if (earlyOrThin) {
+        liqTruthLevel = "unknown";
+        liqTruthLabel = "Too early / thin";
+        liqTruthNote =
+          "Token is extremely new or has very few trades. Liquidity patterns are still forming – treat all signals as early/unstable.";
+      } else if (tradeToLiquidity > 100 && txCount24 < 50) {
         liqTruthLevel = "high";
         liqTruthLabel = "Likely fake / wash";
         liqTruthNote =
@@ -759,6 +821,50 @@ export default async function handler(req, res) {
       tradeToLiquidity, // volume / liquidity ratio
       avgTradeUsd, // average trade size
     };
+
+    // -----------------------------------------------------------------
+    // Liquidity lock / burn detection
+    // -----------------------------------------------------------------
+    let liquidityLock = {
+      status: "unknown", // "locked" | "burned" | "unlocked" | "unknown"
+      label: "Unknown",
+      lockedPct: null, // % of total supply in the detected LP wallet
+      note:
+        "Could not confidently determine whether LP tokens are locked or burned. This does not mean liquidity is safe.",
+    };
+
+    if (lpHolder) {
+      const lpOwner = (lpHolder.owner || "").toLowerCase() || null;
+      const lpPct =
+        typeof lpHolder.pct === "number" && !Number.isNaN(lpHolder.pct)
+          ? lpHolder.pct
+          : null;
+
+      const isBurnOwner =
+        lpOwner && BURN_OWNER_ADDRESSES.has(lpOwner);
+
+      if (isBurnOwner) {
+        liquidityLock.status = "locked";
+        liquidityLock.label = "Burned LP";
+        liquidityLock.lockedPct = lpPct;
+        liquidityLock.note =
+          "The main LP token account is owned by a known burn/incinerator address. Liquidity attached to this pool cannot be pulled by a normal wallet.";
+      } else if (lpOwner) {
+        liquidityLock.status = "unlocked";
+        liquidityLock.label = "No lock / burn";
+        liquidityLock.lockedPct = lpPct;
+        liquidityLock.note =
+          `LP tokens appear to be controlled by a regular wallet (${shortAddr(
+            lpOwner
+          )}). They can likely remove liquidity at any time.`;
+      } else {
+        liquidityLock.status = "unknown";
+        liquidityLock.label = "Unknown";
+        liquidityLock.lockedPct = lpPct;
+        liquidityLock.note =
+          "LP holder detected but owner program/wallet is unknown. Manual review recommended.";
+      }
+    }
 
     // -----------------------------------------------------------------
     // Stablecoin special handling (whitelist)
@@ -806,6 +912,7 @@ export default async function handler(req, res) {
       tokenMetrics,
       tokenAge,
       liquidityTruth,
+      liquidityLock,
     });
   } catch (err) {
     console.error("API /api/check error:", err);
