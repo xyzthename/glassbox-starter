@@ -1,30 +1,23 @@
 // pages/api/check.js
-// GlassBox backend:
-// - Helius RPC for mint, holders, basic funding history
-// - DexScreener for price / liquidity / age / 24h fees
-// HELIUS_API_KEY must be in env (Vercel / .env.local). DO NOT hardcode.
+// GlassBox backend
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
 // Known Solana stablecoins
 const STABLECOIN_WHITELIST = {
-  // USDC (Solana)
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1": {
     symbol: "USDC",
     name: "USD Coin (USDC)",
   },
-  // USDT (Solana)
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": {
     symbol: "USDT",
     name: "Tether USD (USDT)",
   },
-  // PYUSD
   "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": {
     symbol: "PYUSD",
     name: "PayPal USD (PYUSD)",
   },
-  // USD1
   "USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB": {
     symbol: "USD1",
     name: "World Liberty Financial USD (USD1)",
@@ -57,34 +50,26 @@ async function heliusRpc(method, params) {
   return json.result;
 }
 
-// -----------------------------------------------------
-// Mint parsing
-// -----------------------------------------------------
 function parseMintAccount(base64Data) {
   const raw = Buffer.from(base64Data, "base64");
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
 
   let offset = 0;
 
-  // u32: mintAuthorityOption
   const mintAuthOpt = view.getUint32(offset, true);
   const hasMintAuthority = mintAuthOpt !== 0;
-  offset += 4 + 32; // option + pubkey
+  offset += 4 + 32;
 
-  // u64 supply
   const low = view.getUint32(offset, true);
   const high = view.getUint32(offset + 4, true);
   const supplyBig = BigInt(low) + (BigInt(high) << 32n);
   offset += 8;
 
-  // u8 decimals
   const decimals = raw[offset];
   offset += 1;
 
-  // u8 isInitialized
   offset += 1;
 
-  // u32 freezeAuthorityOption
   const freezeOpt = view.getUint32(offset, true);
   const hasFreezeAuthority = freezeOpt !== 0;
 
@@ -101,9 +86,6 @@ function shortAddr(addr) {
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
-// -----------------------------------------------------
-// Safe helpers
-// -----------------------------------------------------
 async function safeGetAsset(mint) {
   try {
     return await heliusRpc("getAsset", [mint]);
@@ -122,7 +104,7 @@ async function safeGetLargestAccounts(mint) {
   }
 }
 
-// ✅ holders count using getTokenAccountsByMint
+// holders count via getTokenAccountsByMint
 async function safeCountTokenHolders(mint) {
   try {
     const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -152,12 +134,10 @@ async function safeCountTokenHolders(mint) {
     return owners.size || null;
   } catch (e) {
     console.error("safeCountTokenHolders error", mint, e?.message);
-    // return null when it fails -> frontend shows N/A instead of lying
     return null;
   }
 }
 
-// DexScreener stats
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
   const url = `https://api.dexscreener.com/token-pairs/v1/${chainId}/${mint}`;
@@ -284,7 +264,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   if (selectedPair?.pairCreatedAt != null) {
     let createdMs = Number(selectedPair.pairCreatedAt);
     if (!Number.isNaN(createdMs) && createdMs > 0) {
-      if (createdMs < 1e12) createdMs *= 1000; // seconds → ms
+      if (createdMs < 1e12) createdMs *= 1000;
       const now = Date.now();
       if (now > createdMs) {
         const diffMs = now - createdMs;
@@ -331,9 +311,6 @@ async function fetchDexAndAgeStatsFallback(mint) {
   }
 }
 
-// -----------------------------------------------------
-// Insider clustering helpers
-// -----------------------------------------------------
 async function safeGetSignatures(address, limit = 5) {
   try {
     const res = await heliusRpc("getSignaturesForAddress", [
@@ -360,10 +337,9 @@ async function safeGetParsedTransaction(signature) {
   }
 }
 
-// Map<holder, {funders:Set<string>}>
 async function buildHolderFundersMap(holderAddresses) {
   const result = {};
-  const addresses = holderAddresses.slice(0, 5); // keep it cheap
+  const addresses = holderAddresses.slice(0, 5);
 
   await Promise.all(
     addresses.map(async (addr) => {
@@ -460,9 +436,6 @@ function buildInsiderClusters(nonLpHolders, holderFundersMap) {
   };
 }
 
-// -----------------------------------------------------
-// API handler
-// -----------------------------------------------------
 export default async function handler(req, res) {
   try {
     if (req.method !== "GET") {
@@ -515,7 +488,6 @@ export default async function handler(req, res) {
 
     const mintInfo = { supply: rawSupply, decimals };
 
-    // metadata
     let name = "Unknown Token";
     let symbol = "";
     let logoURI = null;
@@ -533,7 +505,6 @@ export default async function handler(req, res) {
 
     const tokenMeta = { name, symbol, logoURI };
 
-    // holders & LP
     const largestAccounts = largest?.value || [];
     const supplyBN =
       rawSupply && rawSupply !== "0" ? BigInt(rawSupply) : 0n;
@@ -607,7 +578,6 @@ export default async function handler(req, res) {
       );
     }
 
-    // insider summary (non-LP)
     const INSIDER_THRESHOLD_PCT = 1;
     const WHALE_THRESHOLD_PCT = 5;
 
@@ -658,10 +628,9 @@ export default async function handler(req, res) {
       top10PctExcludingLP,
       topHoldersExcludingLP: top10ExclLP,
       lpHolder,
-      holdersCount: holdersCount ?? null, // null => frontend shows N/A
+      holdersCount: holdersCount ?? null,
     };
 
-    // insider clustering
     const nonLpAddresses = nonLpHolders.map((h) => h.address);
     const holderFundersMap = await buildHolderFundersMap(nonLpAddresses);
     const insiderClusters = buildInsiderClusters(
@@ -669,7 +638,6 @@ export default async function handler(req, res) {
       holderFundersMap
     );
 
-    // origin hint
     let originLabel = "Unknown protocol / origin";
     let originDetail = "";
     const lowerMint = mint.toLowerCase();
@@ -680,7 +648,6 @@ export default async function handler(req, res) {
     }
     const originHint = { label: originLabel, detail: originDetail };
 
-    // risk summary (uses non-LP top10)
     let level = "medium";
     let blurb = "";
     let score = 50;
@@ -723,7 +690,6 @@ export default async function handler(req, res) {
         ? { ageDays: dexStats.ageDays }
         : { ageDays: null };
 
-    // liquidity truth (fake-liq sniff)
     const liqUsd = dexStats.liquidityUsd;
     const vol24 = dexStats.volume24Usd ?? null;
     const txCount24 = dexStats.txCount24 ?? null;
@@ -775,10 +741,9 @@ export default async function handler(req, res) {
       txCount24,
       tradeToLiquidity,
       avgTradeUsd,
-      lockPercent: null, // we are NOT guessing; stay honest until we build LP lock engine
+      lockPercent: null,
     };
 
-    // stablecoin override
     const stableConfig = STABLECOIN_WHITELIST[mint];
     if (stableConfig) {
       if (!tokenMeta.symbol) tokenMeta.symbol = stableConfig.symbol;
