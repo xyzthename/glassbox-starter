@@ -76,7 +76,6 @@
       flex-direction: column;
     }
 
-    /* Header pill top-left */
     .pill-bar {
       display: inline-flex;
       align-items: center;
@@ -97,7 +96,6 @@
       box-shadow: 0 0 0 1px rgba(22, 242, 154, 0.7);
     }
 
-    /* Hero text */
     .hero-title {
       margin-top: 4px;
       font-size: 26px;
@@ -116,7 +114,6 @@
       max-width: 380px;
     }
 
-    /* Mint input block */
     .mint-card {
       margin-top: 10px;
       border-radius: 18px;
@@ -204,9 +201,20 @@
       font-size: 10px;
     }
 
-    /* STATIC pills under scan (original style) */
-    .risk-pills {
+    /* Recent scan pills – clickable, styled like OG badges */
+    .recent-wrap {
       margin-top: 8px;
+    }
+
+    .recent-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .risk-pills {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
@@ -223,12 +231,19 @@
       background: rgba(15, 23, 42, 0.95);
       font-size: 11px;
       white-space: nowrap;
+      cursor: pointer;
     }
 
     .risk-pill.safe {
       border-color: rgba(22, 242, 154, 0.8);
       background: rgba(22, 163, 74, 0.2);
       color: #bbf7d0;
+    }
+
+    .risk-pill.watch {
+      border-color: rgba(250, 204, 21, 0.9);
+      background: rgba(161, 98, 7, 0.4);
+      color: #fef3c7;
     }
 
     .risk-pill.risky {
@@ -259,7 +274,6 @@
       text-decoration: none;
     }
 
-    /* Right card (results) – original style */
     .result-shell {
       border-radius: 18px;
       background: rgba(8, 12, 21, 0.98);
@@ -455,18 +469,12 @@
       color: var(--warn);
     }
 
-    .chip.small {
-      font-size: 10px;
-      padding: 2px 6px;
-    }
-
     .info-note {
       margin-top: 2px;
       font-size: 11px;
       color: var(--text-muted);
     }
 
-    /* holder pills */
     .holders-box {
       margin-top: 6px;
       border-radius: 10px;
@@ -626,27 +634,11 @@
                 <div>We never see or store your wallet or keys. Only mint + public on-chain data.</div>
               </div>
 
-              <!-- STATIC OG PILLS -->
-              <div class="risk-pills">
-                <div class="risk-pill safe">
-                  <span class="risk-pill-dot"></span>
-                  <span>MINER – Safe</span>
-                </div>
-                <div class="risk-pill safe">
-                  <span class="risk-pill-dot"></span>
-                  <span>EARLY – Safe</span>
-                </div>
-                <div class="risk-pill safe">
-                  <span class="risk-pill-dot"></span>
-                  <span>SSWW – Safe</span>
-                </div>
-                <div class="risk-pill safe">
-                  <span class="risk-pill-dot"></span>
-                  <span>RETAIL – Safe</span>
-                </div>
-                <div class="risk-pill risky">
-                  <span class="risk-pill-dot red"></span>
-                  <span>USDC – Very risky</span>
+              <!-- clickable recent scans row -->
+              <div class="recent-wrap">
+                <div class="recent-label">Recent scans</div>
+                <div id="recentRow" class="risk-pills">
+                  <!-- filled by JS -->
                 </div>
               </div>
             </div>
@@ -681,6 +673,12 @@
   </div>
 
   <script>
+    /* ====== YOUR AFFILIATE / REF LINKS – EDIT THESE ONLY ====== */
+    const JUP_REF = "YOUR_JUPITER_REF_ADDRESS_HERE"; // e.g. your wallet/ref for Jupiter
+    const PARDE_URL = "https://parde.trade/?ref=YOUR_PARDE_REF_HERE";
+    const STALK_URL = "https://stalk.fun/?ref=YOUR_STALKFUN_REF_HERE";
+    /* ========================================================== */
+
     const API_BASE = "/api/check";
 
     const mintInput = document.getElementById("mintInput");
@@ -689,6 +687,11 @@
     const scanBtnSpinner = document.getElementById("scanBtnSpinner");
     const resultBox = document.getElementById("resultBox");
     const errorBox = document.getElementById("errorBox");
+    const recentRow = document.getElementById("recentRow");
+
+    // local history
+    const RECENT_KEY = "glassbox_recent_mints";
+    const MAX_RECENT = 5;
 
     function setLoading(on) {
       if (on) {
@@ -797,6 +800,75 @@
       return "chip";
     }
 
+    // recent-scans helpers
+    function saveRecentMint(mint, symbol, riskLevel) {
+      try {
+        const labelSymbol = (symbol || "").toUpperCase();
+        const raw = localStorage.getItem(RECENT_KEY);
+        let arr = [];
+        if (raw) {
+          arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) arr = [];
+        }
+        arr = arr.filter((i) => i.mint !== mint);
+        arr.unshift({
+          mint,
+          symbol: labelSymbol,
+          risk: riskLevel || "unknown",
+        });
+        if (arr.length > MAX_RECENT) arr = arr.slice(0, MAX_RECENT);
+        localStorage.setItem(RECENT_KEY, JSON.stringify(arr));
+        renderRecentMints(arr);
+      } catch {
+        // ignore localStorage errors
+      }
+    }
+
+    function loadRecentMints() {
+      try {
+        const raw = localStorage.getItem(RECENT_KEY);
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return;
+        renderRecentMints(arr);
+      } catch {
+        // ignore
+      }
+    }
+
+    function renderRecentMints(arr) {
+      if (!recentRow) return;
+      if (!arr || !arr.length) {
+        recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+        return;
+      }
+      recentRow.innerHTML = arr
+        .map((item, idx) => {
+          let cls = "risk-pill";
+          if (item.risk === "high") cls += " risky";
+          else if (item.risk === "low") cls += " safe";
+          else cls += " watch";
+
+          let riskLabel =
+            item.risk === "high"
+              ? "Risky"
+              : item.risk === "low"
+              ? "Safe"
+              : "Watch";
+
+          const label =
+            item.symbol || (idx + 1) + " · " + riskLabel;
+
+          return `<button type="button" class="${cls}" data-mint="${item.mint}">
+                    <span class="risk-pill-dot ${
+                      item.risk === "high" ? "red" : ""
+                    }"></span>
+                    <span>${label}</span>
+                  </button>`;
+        })
+        .join("");
+    }
+
     function render(data, mint) {
       const {
         tokenMeta,
@@ -875,15 +947,15 @@
           )} · ~${largestCluster.pctOfSupply.toFixed(1)}%`
         : "No strong cluster among sampled holders.";
 
-      const jupUrl = `https://jup.ag/swap/SOL-${encodeURIComponent(
-        mint
-      )}?ref=3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG`;
+      // Route URLs using your constants
+      const jupRefPart = JUP_REF ? `?ref=${encodeURIComponent(JUP_REF)}` : "";
+      const jupUrl = `https://jup.ag/swap/SOL-${encodeURIComponent(mint)}${jupRefPart}`;
       const dexsUrl = `https://dexscreener.com/solana/${mint}`;
       const axiomUrl = `https://app.axiom.xyz/token/${mint}?network=solana`;
       const photonUrl = `https://photon-sol.tinyastro.io/en/lp/${mint}`;
       const bullxUrl = `https://bullx.io/terminal?chainId=1399811149&address=${mint}`;
-      const pardeUrl = "https://parde.trade/?ref=YOUR_PARDE_REF";
-      const stalkUrl = "https://stalk.fun/?ref=YOUR_STALK_REF";
+      const pardeUrl = PARDE_URL;
+      const stalkUrl = STALK_URL;
 
       resultBox.innerHTML = `
         <div class="result-top">
@@ -917,11 +989,11 @@
         <div class="metrics-row">
           <div class="metric">
             <div class="metric-label">Price</div>
-            <div class="metric-value">${formatUsd(priceUsd)}</div>
+            <div class="metric-value">${formatUsd(tokenMetrics?.priceUsd)}</div>
           </div>
           <div class="metric">
             <div class="metric-label">Liquidity</div>
-            <div class="metric-value">${formatUsd(liqUsd)}</div>
+            <div class="metric-value">${formatUsd(tokenMetrics?.liquidityUsd)}</div>
           </div>
           <div class="metric">
             <div class="metric-label">Supply</div>
@@ -1101,6 +1173,9 @@
           } catch {}
         };
       }
+
+      // update recent history row after successful render
+      saveRecentMint(mint, symbol, riskLevel);
     }
 
     async function handleScan() {
@@ -1137,6 +1212,21 @@
         handleScan();
       }
     });
+
+    // click on recent pill = re-scan that mint
+    if (recentRow) {
+      recentRow.addEventListener("click", (e) => {
+        const pill = e.target.closest(".risk-pill");
+        if (!pill) return;
+        const mint = pill.dataset.mint;
+        if (!mint) return;
+        mintInput.value = mint;
+        handleScan();
+      });
+    }
+
+    // load previous scans on page load
+    loadRecentMints();
   </script>
 </body>
 </html>
