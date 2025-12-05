@@ -11,8 +11,8 @@ const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 // --- Stablecoins we treat specially -----------------------------------
 
 const STABLECOIN_WHITELIST = {
-  // USDC (✅ corrected Solana mint)
-  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1": {
+  // USDC
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
     symbol: "USDC",
     name: "USD Coin (USDC)",
   },
@@ -357,14 +357,11 @@ export default async function handler(req, res) {
     const mintDataBase64 = accountInfo.value.data?.[0];
     const mintParsed = parseMintAccount(mintDataBase64);
 
-    const hasMintAuthority = mintParsed.hasMintAuthority;
-    const hasFreezeAuthority = mintParsed.hasFreezeAuthority;
-
     const mintInfo = {
       supply: mintParsed.supply,
       decimals: mintParsed.decimals,
-      mintAuthority: hasMintAuthority,
-      freezeAuthority: hasFreezeAuthority,
+      mintAuthority: mintParsed.hasMintAuthority,
+      freezeAuthority: mintParsed.hasFreezeAuthority,
     };
 
     // Token metadata
@@ -585,23 +582,6 @@ export default async function handler(req, res) {
     const vol24 = dexStats.volume24Usd;
     const tx24 = dexStats.txCount24;
 
-    // ✅ Liquidity lock %: how much of total supply is in the main pool
-    let lockPercent = null;
-    if (
-      dexStats.poolMintReserve != null &&
-      !Number.isNaN(dexStats.poolMintReserve) &&
-      dexStats.poolMintReserve > 0 &&
-      mintInfo &&
-      mintInfo.supply &&
-      mintInfo.decimals != null
-    ) {
-      const totalSupplyTokens =
-        Number(mintInfo.supply) / Math.pow(10, mintInfo.decimals);
-      if (totalSupplyTokens > 0) {
-        lockPercent = (dexStats.poolMintReserve / totalSupplyTokens) * 100;
-      }
-    }
-
     let tradeToLiquidity = null;
     let avgTradeUsd = null;
     let liqTruthLevel = null;
@@ -646,7 +626,6 @@ export default async function handler(req, res) {
       avgTradeUsd,
       volume24Usd: vol24,
       txCount24: tx24,
-      lockPercent, // ✅ new
     };
 
     // --- Stablecoin override ------------------------------------------
@@ -671,10 +650,6 @@ export default async function handler(req, res) {
     return res.status(200).json({
       tokenMeta,
       mintInfo,
-      // ✅ expose booleans for the frontend
-      mintAuthority: hasMintAuthority,
-      freezeAuthority: hasFreezeAuthority,
-
       holderSummary,
       insiderSummary,
       insiderClusters,
