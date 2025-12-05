@@ -1,15 +1,12 @@
-// pages/api/check.js
-// GlassBox backend – v2
+// api/check.js
+// GlassBox backend
 // - Helius RPC for mint + holders
-// - DexScreener for price / liquidity / age / volume / tx count / socials
-// - Insider snapshot + holder summary + simple scam score
-// - IMPORTANT: never hard-code HELIUS key, only use process.env
+// - DexScreener for price / liquidity / age / 24h DEX fees
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-// --- Stablecoins we treat specially -----------------------------------
-
+// Known Solana stablecoins (whitelist)
 const STABLECOIN_WHITELIST = {
   // USDC
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
@@ -21,271 +18,380 @@ const STABLECOIN_WHITELIST = {
     symbol: "USDT",
     name: "Tether USD (USDT)",
   },
+  // PYUSD (Solana)
+  "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": {
+    symbol: "PYUSD",
+    name: "PayPal USD (PYUSD)",
+  },
+  // USD1 (Solana)
+  "USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB": {
+    symbol: "USD1",
+    name: "World Liberty Financial USD (USD1)",
+  },
 };
 
-// --- Generic helpers ---------------------------------------------------
+async function heliusRpc(method, params) {
+  if (!HELIUS_API_KEY) {
+    throw new Error("HELIUS_API_KEY is not set in environment");
+  }
 
-async function callRpc(method, params) {
   const res = await fetch(RPC_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params,
+    }),
   });
 
-  if (!res.ok) throw new Error(`RPC error: ${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    throw new Error(`RPC error: ${res.status} ${res.statusText}`);
+  }
   const json = await res.json();
-  if (json.error) throw new Error(json.error.message || "RPC error");
+  if (json.error) {
+    throw new Error(json.error.message || "RPC error");
+  }
   return json.result;
 }
 
-// Decode SPL Mint account (base64) → supply/decimals/authorities
-function parseMintAccount(base64Data) {
-  if (!base64Data) throw new Error("Missing mint account data");
-  const buf = Buffer.from(base64Data, "base64");
-  if (buf.length < 82) throw new Error("Mint account data too short");
+// ---------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------
 
-  const supply = buf.readBigUInt64LE(36);
-  const decimals = buf[44];
-  const mintAuthOpt = buf.readUInt32LE(0);
-  const freezeAuthOpt = buf.readUInt32LE(48);
+// Decode mint account data (supply, decimals, authorities)
+function parseMintAccount(base64Data) {
+  const raw = Buffer.from(base64Data, "base64");
+  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+
+  let offset = 0;
+
+  // u32: mintAuthorityOption
+  const mintAuthOpt = view.getUint32(offset, true);
+  const hasMintAuthority = mintAuthOpt !== 0;
+  offset += 4 + 32; // skip option + pubkey bytes
+
+  // u64: supply (little endian)
+  const low = view.getUint32(offset, true);
+  const high = view.getUint32(offset + 4, true);
+  const supplyBig = BigInt(low) + (BigInt(high) << 32n);
+  offset += 8;
+
+  // u8: decimals
+  const decimals = raw[offset];
+  offset += 1;
+
+  // u8: isInitialized (unused)
+  offset += 1;
+
+  // u32: freezeAuthorityOption
+  const freezeOpt = view.getUint32(offset, true);
+  const hasFreezeAuthority = freezeOpt !== 0;
 
   return {
-    supply: supply.toString(),
+    supply: supplyBig.toString(),
     decimals,
-    hasMintAuthority: mintAuthOpt !== 0,
-    hasFreezeAuthority: freezeAuthOpt !== 0,
+    hasMintAuthority,
+    hasFreezeAuthority,
   };
 }
 
-function shortAddr(a) {
-  if (!a || a.length <= 8) return a;
-  return `${a.slice(0, 4)}…${a.slice(-4)}`;
+function shortAddr(addr) {
+  if (!addr || addr.length <= 8) return addr;
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
-// Count token accounts – but don’t crash API if it fails
-async function safeCountTokenHolders(mint) {
+// Safe wrappers so big tokens (USDC, USDT, etc.) don’t blow us up
+async function safeGetAsset(mint) {
   try {
-    const result = await callRpc("getTokenAccountsByMint", [
-      mint,
-      { encoding: "jsonParsed", commitment: "confirmed" },
-    ]);
-    if (!result || !Array.isArray(result.value)) return null;
-    return result.value.length;
+    return await heliusRpc("getAsset", [mint]);
   } catch (e) {
-    console.error("safeCountTokenHolders error:", e?.message);
-    return null; // front-end should show “RPC limit / index missing”
+    console.error("safeGetAsset error for mint", mint, e?.message);
+    return null;
   }
 }
 
-// --- DexScreener integration ------------------------------------------
+async function safeGetLargestAccounts(mint) {
+  try {
+    // Standard SPL RPC – returns up to 20 accounts
+    return await heliusRpc("getTokenLargestAccounts", [mint]);
+  } catch (e) {
+    console.error("safeGetLargestAccounts error for mint", mint, e?.message);
+    // Fallback: no holder data instead of hard error
+    return { value: [] };
+  }
+}
+
+// Count unique wallets holding a non-zero balance of this mint
+async function safeCountTokenHolders(mint) {
+  try {
+    // SPL Token program id
+    const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+    const result = await heliusRpc("getProgramAccounts", [
+      TOKEN_PROGRAM_ID,
+      {
+        commitment: "processed",
+        encoding: "jsonParsed",
+        filters: [
+          // SPL token account size
+          { dataSize: 165 },
+          // Mint field is at offset 0
+          {
+            memcmp: {
+              offset: 0,
+              bytes: mint,
+            },
+          },
+        ],
+      },
+    ]);
+
+    const accounts = Array.isArray(result) ? result : [];
+    const owners = new Set();
+
+    for (const acc of accounts) {
+      const parsed = acc.account?.data?.parsed;
+      const info = parsed?.info;
+      if (!info) continue;
+
+      const owner = info.owner;
+      const uiAmount = info.tokenAmount?.uiAmount ?? 0;
+
+      if (!owner || !uiAmount || uiAmount <= 0) continue;
+      owners.add(owner);
+    }
+
+    // If this is some huge token, avoid blowing things up
+    if (owners.size === 0) return null;
+
+    return owners.size;
+  } catch (e) {
+    console.error("safeCountTokenHolders error for mint", mint, e?.message);
+    // If this fails, we just won't show holdersCount instead of breaking API
+    return null;
+  }
+}
 
 /**
- * Uses DexScreener "token-pairs" endpoint:
- *   GET https://api.dexscreener.com/token-pairs/v1/solana/{mint}
- *
- * Returns:
- *  - priceUsd
- *  - liquidityUsd
- *  - ageDays
- *  - volume24Usd
- *  - txCount24
- *  - dexFeesUsd24h  (~0.3% of vol24)
- *  - poolMintReserve (for LP matching)
- *  - socials { website, twitter, telegram, discord, others[] }  (URLs)
+ * DexScreener helper:
+ *  - GET /token-pairs/v1/solana/{tokenAddress}
+ *  - Compute:
+ *      priceUsd         -> token price in USD
+ *      liquidityUsd
+ *      ageDays          -> pairCreatedAt -> days
+ *      dexFeesUsd24h    -> ~24h DEX trading fees in USD (0.3% of h24 volume)
+ *      poolMintReserve  -> token amount in the main pool (for LP detection)
+ *      volume24Usd      -> 24h volume in USD
+ *      txCount24        -> 24h trades count (buys + sells)
  */
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
   const url = `https://api.dexscreener.com/token-pairs/v1/${chainId}/${mint}`;
 
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`DexScreener error: ${res.status}`);
-  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
+  }
 
-  const pairs = Array.isArray(json) ? json : [];
+  const json = await res.json();
+  const rawPairs = Array.isArray(json) ? json : [];
+  const mintLower = mint.toLowerCase();
+
+  const pairs = rawPairs.filter((p) => p && p.chainId === chainId);
+
   if (!pairs.length) {
     return {
       priceUsd: null,
       liquidityUsd: null,
       ageDays: null,
-      volume24Usd: null,
-      txCount24: null,
       dexFeesUsd24h: null,
       poolMintReserve: null,
-      socials: null,
+      volume24Usd: null,
+      txCount24: null,
     };
   }
 
-  const mintLower = mint.toLowerCase();
   let best = null;
-  let bestLiq = 0;
+  let bestLiquidity = 0;
 
   for (const p of pairs) {
-    if (!p || p.chainId !== chainId) continue;
+    const baseAddr = p.baseToken?.address;
+    const quoteAddr = p.quoteToken?.address;
 
-    const liqUsd =
-      p.liquidity && typeof p.liquidity.usd === "number"
-        ? p.liquidity.usd
-        : Number(p.liquidity?.usd ?? NaN);
-    const priceUsd =
-      p.priceUsd != null ? Number(p.priceUsd) : NaN;
+    const rawPriceUsd =
+      p.priceUsd != null ? Number(p.priceUsd) : null; // BASE in USD
     const priceNative =
-      p.priceNative != null ? Number(p.priceNative) : NaN;
+      p.priceNative != null ? Number(p.priceNative) : null; // base in terms of quote
+    const liqUsd =
+      p.liquidity?.usd != null ? Number(p.liquidity.usd) : null;
 
-    if (!liqUsd || Number.isNaN(liqUsd) || Number.isNaN(priceUsd)) continue;
-
-    const baseAddr = p.baseToken?.address?.toLowerCase();
-    const quoteAddr = p.quoteToken?.address?.toLowerCase();
+    if (liqUsd == null || Number.isNaN(liqUsd)) continue;
+    if (rawPriceUsd == null || Number.isNaN(rawPriceUsd)) continue;
 
     let myPriceUsd = null;
     let poolMintReserve = null;
 
-    if (baseAddr === mintLower) {
-      myPriceUsd = priceUsd;
+    if (baseAddr && baseAddr.toLowerCase() === mintLower) {
+      // Mint is BASE
+      myPriceUsd = rawPriceUsd;
       poolMintReserve =
         p.liquidity?.base != null ? Number(p.liquidity.base) : null;
-    } else if (quoteAddr === mintLower && !Number.isNaN(priceNative) && priceNative !== 0) {
-      myPriceUsd = priceUsd / priceNative;
+    } else if (
+      quoteAddr &&
+      quoteAddr.toLowerCase() === mintLower &&
+      priceNative != null &&
+      !Number.isNaN(priceNative) &&
+      priceNative !== 0
+    ) {
+      // Mint is QUOTE
+      myPriceUsd = rawPriceUsd / priceNative;
       poolMintReserve =
         p.liquidity?.quote != null ? Number(p.liquidity.quote) : null;
-    } else {
-      continue;
     }
 
-    if (Number.isNaN(myPriceUsd)) continue;
-    if (!best || liqUsd > bestLiq) {
+    if (myPriceUsd == null || Number.isNaN(myPriceUsd)) continue;
+
+    if (liqUsd > bestLiquidity) {
+      bestLiquidity = liqUsd;
       best = {
         pair: p,
         priceUsd: myPriceUsd,
         liquidityUsd: liqUsd,
         poolMintReserve,
       };
-      bestLiq = liqUsd;
     }
   }
 
-  if (!best) {
-    // fall back to any highest-liquidity pair if mapping fails
-    const p = pairs.reduce((a, b) =>
-      (a.liquidity?.usd || 0) >= (b.liquidity?.usd || 0) ? a : b
-    );
-    best = {
-      pair: p,
-      priceUsd: Number(p.priceUsd ?? NaN),
-      liquidityUsd: Number(p.liquidity?.usd ?? NaN),
-      poolMintReserve:
-        p.baseToken?.address?.toLowerCase() === mintLower
-          ? Number(p.liquidity?.base ?? NaN)
-          : Number(p.liquidity?.quote ?? NaN),
-    };
-  }
-
-  const selected = best.pair;
+  let selectedPair = null;
+  let priceUsd = null;
+  let liquidityUsd = null;
+  let pairCreatedAt = null;
   let volume24 = null;
   let txCount24 = null;
-  let ageDays = null;
+  let poolMintReserve = null;
   let dexFeesUsd24h = null;
 
-  if (selected.volume && selected.volume.h24 != null) {
-    const v24 = Number(selected.volume.h24);
-    if (!Number.isNaN(v24) && v24 > 0) volume24 = v24;
-  }
+  if (best) {
+    selectedPair = best.pair;
+    priceUsd = best.priceUsd;
+    liquidityUsd = best.liquidityUsd;
+    poolMintReserve = best.poolMintReserve ?? null;
+  } else {
+    // Fallback: pick highest-liquidity pair even if price mapping is imperfect
+    selectedPair = pairs.reduce((a, b) =>
+      (a.liquidity?.usd || 0) >= (b.liquidity?.usd || 0) ? a : b
+    );
+    liquidityUsd =
+      selectedPair.liquidity?.usd != null
+        ? Number(selectedPair.liquidity.usd)
+        : null;
+    priceUsd =
+      selectedPair.priceUsd != null
+        ? Number(selectedPair.priceUsd)
+        : null;
 
-  if (selected.txns && selected.txns.h24) {
-    const buys = Number(selected.txns.h24.buys || 0);
-    const sells = Number(selected.txns.h24.sells || 0);
-    const total = buys + sells;
-    if (!Number.isNaN(total) && total > 0) txCount24 = total;
-  }
-
-  if (volume24 != null) dexFeesUsd24h = volume24 * 0.003;
-
-  // NOTE: DexScreener pairCreatedAt is in ms (per docs)
-  if (selected.pairCreatedAt != null) {
-    const createdMs = Number(selected.pairCreatedAt);
-    const now = Date.now();
-    if (!Number.isNaN(createdMs) && createdMs > 0 && createdMs < now) {
-      ageDays = (now - createdMs) / (1000 * 60 * 60 * 24);
+    const baseAddr = selectedPair.baseToken?.address;
+    const quoteAddr = selectedPair.quoteToken?.address;
+    if (baseAddr && baseAddr.toLowerCase() === mintLower) {
+      poolMintReserve =
+        selectedPair.liquidity?.base != null
+          ? Number(selectedPair.liquidity.base)
+          : null;
+    } else if (quoteAddr && quoteAddr.toLowerCase() === mintLower) {
+      poolMintReserve =
+        selectedPair.liquidity?.quote != null
+          ? Number(selectedPair.liquidity.quote)
+          : null;
     }
   }
 
-  // Socials + website (we’ll use URLs, not handles)
-  let socials = null;
-  if (selected.info) {
-    const info = selected.info;
-    const websites = Array.isArray(info.websites) ? info.websites : [];
-    const socialsArr = Array.isArray(info.socials) ? info.socials : [];
+  // 24h volume (USD)
+  if (
+    selectedPair &&
+    selectedPair.volume &&
+    typeof selectedPair.volume === "object"
+  ) {
+    const v24 = selectedPair.volume.h24;
+    if (v24 != null) {
+      const n24 = Number(v24);
+      if (!Number.isNaN(n24)) {
+        volume24 = n24;
+      }
+    }
+  }
 
-    const website =
-      websites.length && websites[0] && typeof websites[0].url === "string"
-        ? websites[0].url
-        : null;
+  // 24h trades (buys + sells) – used for fake-liquidity detection
+  if (selectedPair && selectedPair.txns && typeof selectedPair.txns === "object") {
+    const t24 = selectedPair.txns.h24;
+    if (t24) {
+      const buys = Number(t24.buys || 0);
+      const sells = Number(t24.sells || 0);
+      const total = buys + sells;
+      if (!Number.isNaN(total) && total > 0) {
+        txCount24 = total;
+      }
+    }
+  }
 
-    const find = (platformName) =>
-      socialsArr.find(
-        (s) =>
-          s &&
-          typeof s.platform === "string" &&
-          s.platform.toLowerCase() === platformName
-      ) || null;
+  // 24h DEX fee estimate (assuming 0.3% pool fee)
+  if (volume24 != null && !Number.isNaN(volume24)) {
+    dexFeesUsd24h = volume24 * 0.003;
+  }
 
-    const tw = find("twitter");
-    const tg = find("telegram");
-    const dc = find("discord");
+  // pairCreatedAt timestamp -> age in days (ms vs s heuristic)
+  if (selectedPair) {
+    pairCreatedAt = selectedPair.pairCreatedAt;
+  }
 
-    const others = socialsArr
-      .filter(
-        (s) =>
-          s &&
-          typeof s.platform === "string" &&
-          !["twitter", "telegram", "discord"].includes(
-            s.platform.toLowerCase()
-          )
-      )
-      .map((s) => ({
-        platform: s.platform,
-        url: s.handle ? `https://${s.platform}.com/${s.handle}` : null,
-      }));
-
-    socials = {
-      website,
-      twitter: tw && tw.handle ? `https://x.com/${tw.handle}` : null,
-      telegram: tg && tg.handle ? `https://t.me/${tg.handle}` : null,
-      discord: dc && dc.handle ? `https://discord.gg/${dc.handle}` : null,
-      others,
-    };
+  let ageDays = null;
+  if (pairCreatedAt != null) {
+    let createdMs = Number(pairCreatedAt);
+    if (!Number.isNaN(createdMs) && createdMs > 0) {
+      if (createdMs < 1e12) {
+        createdMs *= 1000;
+      }
+      const now = Date.now();
+      if (now > createdMs) {
+        ageDays = (now - createdMs) / (1000 * 60 * 60 * 24);
+      }
+    }
   }
 
   return {
-    priceUsd: best.priceUsd,
-    liquidityUsd: best.liquidityUsd,
-    poolMintReserve: best.poolMintReserve ?? null,
+    priceUsd,
+    liquidityUsd,
     ageDays,
+    dexFeesUsd24h,
+    poolMintReserve,
     volume24Usd: volume24,
     txCount24,
-    dexFeesUsd24h,
-    socials,
   };
 }
 
-async function fetchDexStatsSafe(mint) {
+// Simple fallback if DexScreener is down
+async function fetchDexAndAgeStatsFallback(mint) {
   try {
-    return await fetchDexAndAgeStatsFromDexScreener(mint);
+    const res = await fetchDexAndAgeStatsFromDexScreener(mint);
+    return res;
   } catch (e) {
-    console.error("DexScreener failed:", e?.message);
+    console.error("Dex/Age stats fallback error for mint", mint, e?.message);
     return {
       priceUsd: null,
       liquidityUsd: null,
-      poolMintReserve: null,
       ageDays: null,
+      dexFeesUsd24h: null,
+      poolMintReserve: null,
       volume24Usd: null,
       txCount24: null,
-      dexFeesUsd24h: null,
-      socials: null,
     };
   }
 }
 
-// --- API handler -------------------------------------------------------
+// ---------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------
 
 export default async function handler(req, res) {
   try {
@@ -295,49 +401,32 @@ export default async function handler(req, res) {
     }
 
     const mint = (req.query.mint || "").trim();
-    if (!mint) return res.status(400).json({ error: "Missing mint param" });
+    if (!mint) {
+      return res.status(400).json({ error: "Missing mint query parameter" });
+    }
+
     if (!HELIUS_API_KEY) {
       return res
         .status(500)
-        .json({ error: "HELIUS_API_KEY missing in env" });
+        .json({ error: "HELIUS_API_KEY is not set in environment" });
     }
 
     // 1) Mint account
-    const accountInfoPromise = callRpc("getAccountInfo", [
+    const accountInfoPromise = heliusRpc("getAccountInfo", [
       mint,
-      { encoding: "base64", commitment: "confirmed" },
+      { encoding: "base64" },
     ]);
 
-    // 2) Token metadata
-    const assetPromise = fetch(
-      "https://mainnet.helius-rpc.com/?api-key=" + HELIUS_API_KEY,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "getAsset",
-          params: { id: mint },
-        }),
-      }
-    ).then(async (r) => {
-      if (!r.ok) throw new Error("getAsset error " + r.status);
-      const j = await r.json();
-      if (j.error) throw new Error(j.error.message || "getAsset error");
-      return j.result;
-    });
+    // 2) Metadata
+    const assetPromise = safeGetAsset(mint);
 
-    // 3) Largest accounts (top holders)
-    const largestPromise = callRpc("getTokenLargestAccounts", [
-      mint,
-      { commitment: "confirmed" },
-    ]);
+    // 3) Largest accounts (holders, top 20)
+    const largestPromise = safeGetLargestAccounts(mint);
 
-    // 4) Dex stats
-    const dexStatsPromise = fetchDexStatsSafe(mint);
+    // 4) Price / liquidity / age / 24h fees from DexScreener
+    const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
 
-    // 5) Total holder count
+    // 5) Total unique holders (via getTokenAccountsByMint)
     const holdersCountPromise = safeCountTokenHolders(mint);
 
     const [accountInfo, asset, largest, dexStats, holdersCount] =
@@ -350,21 +439,25 @@ export default async function handler(req, res) {
       ]);
 
     if (!accountInfo?.value) {
-      return res.status(404).json({ error: "Not a valid SPL mint account" });
+      return res
+        .status(404)
+        .json({ error: "Not a valid SPL mint account on Solana." });
     }
 
-    // Mint core info
-    const mintDataBase64 = accountInfo.value.data?.[0];
-    const mintParsed = parseMintAccount(mintDataBase64);
+    const dataBase64 = accountInfo.value.data?.[0];
+    const parsedMint = parseMintAccount(dataBase64);
+
+    const rawSupply = parsedMint.supply; // string
+    const decimals = parsedMint.decimals;
+    const mintAuthority = parsedMint.hasMintAuthority;
+    const freezeAuthority = parsedMint.hasFreezeAuthority;
 
     const mintInfo = {
-      supply: mintParsed.supply,
-      decimals: mintParsed.decimals,
-      mintAuthority: mintParsed.hasMintAuthority,
-      freezeAuthority: mintParsed.hasFreezeAuthority,
+      supply: rawSupply,
+      decimals,
     };
 
-    // Token metadata
+    // Token metadata from asset
     let name = "Unknown Token";
     let symbol = "";
     let logoURI = null;
@@ -372,298 +465,350 @@ export default async function handler(req, res) {
     try {
       if (asset?.content?.metadata) {
         name = asset.content.metadata.name || name;
-        symbol = asset.content.metadata.symbol || "";
+        symbol = asset.content.metadata.symbol || symbol;
       }
       if (asset?.content?.links?.image) {
         logoURI = asset.content.links.image;
       }
     } catch (e) {
-      console.error("metadata parse error:", e?.message);
+      console.error("metadata parse error", e?.message);
     }
 
-    const tokenMeta = { mint, name, symbol, logoURI };
+    const tokenMeta = { name, symbol, logoURI };
 
-    // --- Holder distribution ------------------------------------------
+    // -----------------------------------------------------------------
+    // Holder summary (top 10 wallets) WITH LP detection
+    // -----------------------------------------------------------------
+    const largestAccounts = largest?.value || [];
+    const supplyBN =
+      rawSupply && rawSupply !== "0" ? BigInt(rawSupply) : 0n;
 
-    const largestAccounts = Array.isArray(largest?.value) ? largest.value : [];
-    const supplyBN = BigInt(mintParsed.supply || "0");
+    const poolMintReserve =
+      dexStats.poolMintReserve != null
+        ? Number(dexStats.poolMintReserve)
+        : null;
 
-    const allHolders = largestAccounts.map((acc) => {
-      const amountStr = acc.amount || "0";
+    let lpHolder = null;
+    let bestReserveRelDiff = Infinity;
+
+    // First pass: build all holders + try to detect LP
+    let allHolders = largestAccounts.map((entry) => {
+      const amountStr = entry.amount || "0";
       const amountBN = BigInt(amountStr);
-      const pct =
-        supplyBN > 0n
-          ? Number((amountBN * 10_000n) / supplyBN) / 100
-          : 0;
+      let pct = 0;
+      if (supplyBN > 0n) {
+        pct = Number((amountBN * 10_000n) / supplyBN) / 100; // %
+      }
+
       const uiAmount =
-        typeof acc.uiAmount === "number"
-          ? acc.uiAmount
-          : Number(acc.uiAmount ?? 0);
-      return {
-        address: acc.address,
+        typeof entry.uiAmount === "number"
+          ? entry.uiAmount
+          : Number(entry.uiAmount ?? 0);
+
+      const holder = {
+        address: entry.address,
         pct,
         uiAmount,
       };
-    });
 
-    // Detect LP by matching Dex pool reserve to a holder (or fallback to biggest)
-    let lpHolder = null;
-    let bestRelDiff = Infinity;
-    const poolReserve = dexStats.poolMintReserve;
+      // Primary LP detection: match DexScreener pool reserve to a holder
+      if (
+        poolMintReserve != null &&
+        !Number.isNaN(poolMintReserve) &&
+        poolMintReserve > 0 &&
+        uiAmount != null &&
+        !Number.isNaN(uiAmount) &&
+        uiAmount > 0
+      ) {
+        const diff = Math.abs(uiAmount - poolMintReserve);
+        const relDiff = diff / poolMintReserve;
 
-    if (
-      poolReserve != null &&
-      !Number.isNaN(poolReserve) &&
-      poolReserve > 0
-    ) {
-      for (const h of allHolders) {
-        if (!h.uiAmount || Number.isNaN(h.uiAmount)) continue;
-        const diff = Math.abs(h.uiAmount - poolReserve);
-        const rel = diff / poolReserve;
-        if (rel < 0.2 && rel < bestRelDiff) {
-          bestRelDiff = rel;
-          lpHolder = h;
+        // Allow up to 20% slack for rounding / fees / pool drift
+        if (relDiff < 0.2 && relDiff < bestReserveRelDiff) {
+          bestReserveRelDiff = relDiff;
+          lpHolder = holder;
         }
       }
+
+      return holder;
+    });
+
+    // Ensure sorted by balance (RPC usually is, but be safe)
+    allHolders.sort((a, b) => (b.uiAmount || 0) - (a.uiAmount || 0));
+
+    // Fallback LP detection: if no LP matched by reserve but
+    // top holder has a huge chunk (>= 40%), treat first holder as LP.
+    if (!lpHolder && allHolders.length > 0 && allHolders[0].pct >= 40) {
+      lpHolder = allHolders[0];
     }
 
-    if (!lpHolder && allHolders.length) {
-      lpHolder = allHolders.reduce((a, b) =>
-        (a.uiAmount || 0) >= (b.uiAmount || 0) ? a : b
-      );
-    }
-
-    allHolders.sort((a, b) => (b.pct || 0) - (a.pct || 0));
+    // Top 10 INCLUDING LP (raw)
     const top10InclLP = allHolders.slice(0, 10);
 
+    // Top 10 EXCLUDING LP (remove LP first, then take next 10)
     const nonLpHolders = lpHolder
       ? allHolders.filter((h) => h.address !== lpHolder.address)
-      : allHolders.slice();
+      : allHolders;
 
     const top10ExclLP = nonLpHolders.slice(0, 10);
 
-    const pctTop10InclLP = top10InclLP.reduce(
-      (sum, h) => sum + (h.pct || 0),
-      0
+    let top10Pct = null;
+    let top10PctExcludingLP = null;
+
+    if (top10InclLP.length && rawSupply && rawSupply !== "0") {
+      top10Pct = top10InclLP.reduce((sum, h) => sum + (h.pct || 0), 0);
+    }
+
+    if (top10ExclLP.length && rawSupply && rawSupply !== "0") {
+      top10PctExcludingLP = top10ExclLP.reduce(
+        (sum, h) => sum + (h.pct || 0),
+        0
+      );
+    }
+
+    // ---------------------------------------------------------------
+    // Insider / whale snapshot (non-LP wallets only)
+    // ---------------------------------------------------------------
+    const INSIDER_THRESHOLD_PCT = 1; // wallets >= 1% count as insiders
+    const WHALE_THRESHOLD_PCT = 5; // wallets >= 5% count as whales
+
+    const insidersAll = nonLpHolders.filter(
+      (h) => (h.pct || 0) >= INSIDER_THRESHOLD_PCT
     );
-    const pctTop10ExclLP = top10ExclLP.reduce(
-      (sum, h) => sum + (h.pct || 0),
-      0
+    const whales = nonLpHolders.filter(
+      (h) => (h.pct || 0) >= WHALE_THRESHOLD_PCT
     );
 
-    const holderSummary = {
-      top10Pct: pctTop10InclLP,
-      topHolders: top10InclLP,
-      top10PctExcludingLP: pctTop10ExclLP,
-      topHoldersExcludingLP: top10ExclLP,
-      lpHolder,
-      holdersCount: holdersCount, // might be null if RPC capped – front-end should show “RPC limit / index missing”
-    };
-
-    // --- Insiders snapshot --------------------------------------------
-
-    const INSIDER_PCT = 1; // insider ≥1%
-    const WHALE_PCT = 5;   // whale   ≥5%
-
-    const insidersAll = nonLpHolders.filter((h) => (h.pct || 0) >= INSIDER_PCT);
-    const whales = nonLpHolders.filter((h) => (h.pct || 0) >= WHALE_PCT);
     const insidersTotalPct = insidersAll.reduce(
       (sum, h) => sum + (h.pct || 0),
       0
     );
-    const largestInsider = insidersAll[0] || null;
+
+    const largestInsider = insidersAll.length ? insidersAll[0] : null;
 
     let insiderRiskLevel = "low";
-    let insiderNote = "No strong insider concentration detected.";
+    let insiderNote = "";
 
-    if (insidersTotalPct > 60 || whales.length >= 3) {
-      insiderRiskLevel = "high";
+    if (!insidersAll.length) {
+      insiderRiskLevel = "low";
       insiderNote =
-        "Very high concentration among a few wallets. Classic rug-pull pattern if they dump.";
-    } else if (insidersTotalPct > 35 || whales.length >= 1) {
+        "No non-LP wallet holds more than 1% of supply. Insider risk looks low based on distribution.";
+    } else if (insidersTotalPct <= 20 && whales.length <= 1) {
       insiderRiskLevel = "medium";
-      insiderNote =
-        "Moderate concentration among insiders. Watch wallets holding ≥1% closely.";
+      insiderNote = `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
+        1
+      )}% of supply). Some concentrated holders but not extreme.`;
+    } else {
+      insiderRiskLevel = "high";
+      insiderNote = `${insidersAll.length} wallets each hold ≥1% (total ${insidersTotalPct.toFixed(
+        1
+      )}% of supply). This is a strong insider/whale cluster.`;
     }
 
     const insiderSummary = {
-      insidersAll,
-      whales,
-      insidersTotalPct,
-      largestInsider,
-      riskLevel: insiderRiskLevel,
-      note: insiderNote,
-      insiderWalletCount: insidersAll.length,
+      insiderCount: insidersAll.length, // # wallets >=1%
+      whaleCount: whales.length, // # wallets >=5%
+      insidersTotalPct, // % of supply (ex-LP) they control
+      largestInsider, // top insider wallet (if any)
+      riskLevel: insiderRiskLevel, // low / medium / high
+      note: insiderNote, // human-readable summary
     };
 
-    // Simple “cluster” object so the Insiders & Clusters UI always has data
-    const insiderClusters = {
-      riskLevel: insiderRiskLevel,
-      note: insiderNote,
-      sampleCluster: largestInsider
-        ? {
-            label: "Largest insider",
-            leader: largestInsider.address,
-            leaderShort: shortAddr(largestInsider.address),
-            pctOfSupply: largestInsider.pct,
-          }
-        : null,
+    const effectiveHoldersCount =
+      holdersCount != null ? holdersCount : allHolders.length;
+
+    const holderSummary = {
+      // Top 10 including LP (raw concentration)
+      top10Pct,
+      topHolders: top10InclLP,
+
+      // Top 10 AFTER dropping the LP wallet
+      top10PctExcludingLP,
+      topHoldersExcludingLP: top10ExclLP,
+
+      // LP wallet we detected (or null)
+      lpHolder,
+
+      // Total unique wallets with > 0 balance (or fallback to top-20 count)
+      holdersCount: effectiveHoldersCount,
     };
 
-    // --- Origin hint ---------------------------------------------------
-
+    // -----------------------------------------------------------------
+    // Origin hint
+    // -----------------------------------------------------------------
     let originLabel = "Unknown protocol / origin";
     let originDetail = "";
-    const lowerName = name.toLowerCase();
-    const lowerSym = (symbol || "").toLowerCase();
-    const desc = (asset?.content?.metadata?.description || "").toLowerCase();
+    const lowerMint = mint.toLowerCase();
 
-    if (
-      lowerName.includes("pump") ||
-      lowerSym.includes("pump") ||
-      desc.includes("pump.fun")
-    ) {
+    if (lowerMint.endsWith("pump")) {
       originLabel = "Likely Pump.fun mint";
       originDetail =
-        "Mint resembles Pump.fun pattern. Pump.fun usually locks LP, but always double-check.";
+        "Mint resembles Pump.fun pattern. Always double-check creator + socials.";
     }
 
-    const originHint = { label: originLabel, detail: originDetail };
-
-    // --- Scam score ----------------------------------------------------
-
-    let scoreLevel = "medium";
-    let scoreBlurb = "";
-    let score = 50;
-
-    if (!mintInfo.mintAuthority && !mintInfo.freezeAuthority && pctTop10ExclLP <= 35) {
-      scoreLevel = "low";
-      score = 90;
-      scoreBlurb =
-        "Mint & freeze authority renounced, and non-LP top holders are reasonably distributed.";
-    } else if (!mintInfo.mintAuthority && pctTop10ExclLP <= 60) {
-      scoreLevel = "medium";
-      score = 65;
-      scoreBlurb =
-        "Mint authority renounced but non-LP holders still have some concentration.";
-    } else {
-      scoreLevel = "high";
-      score = 25;
-      scoreBlurb =
-        "Mint or freeze authority still active and/or heavy concentration among non-LP holders.";
-    }
-
-    const riskSummary = {
-      level: scoreLevel,
-      blurb: scoreBlurb,
-      score, // GlassBox scam score 0-100
+    const originHint = {
+      label: originLabel,
+      detail: originDetail,
     };
 
-    // --- Dex metrics + age + liquidity truth --------------------------
+    // -----------------------------------------------------------------
+    // Risk model (uses TOP 10 EXCLUDING LP)
+    // -----------------------------------------------------------------
+    let level = "medium";
+    let blurb = "";
+    let score = 50;
 
+    if (
+      !mintAuthority &&
+      !freezeAuthority &&
+      top10PctExcludingLP !== null &&
+      top10PctExcludingLP <= 25
+    ) {
+      level = "low";
+      blurb =
+        "Mint authority renounced, no freeze authority, and non-LP top holders are reasonably distributed.";
+      score = 90;
+    } else if (
+      !mintAuthority &&
+      (top10PctExcludingLP === null || top10PctExcludingLP <= 60)
+    ) {
+      level = "medium";
+      blurb =
+        "Mint authority renounced, but non-LP supply may still be fairly concentrated.";
+      score = 65;
+    } else {
+      level = "high";
+      blurb =
+        "Mint authority or freeze authority is still active and/or non-LP top holders control a large portion of supply.";
+      score = 25;
+    }
+
+    const riskSummary = { level, blurb, score };
+
+    // -----------------------------------------------------------------
+    // Dex metrics + token age + 24h DEX fee estimate
+    // -----------------------------------------------------------------
     const tokenMetrics = {
       priceUsd: dexStats.priceUsd,
       liquidityUsd: dexStats.liquidityUsd,
+      // IMPORTANT: this is 24h DEX fees est., NOT global chain fees
       dexFeesUsd24h: dexStats.dexFeesUsd24h,
     };
 
-    let tokenAge = null;
-    if (
-      dexStats.ageDays != null &&
-      !Number.isNaN(dexStats.ageDays) &&
-      dexStats.ageDays >= 0
-    ) {
-      tokenAge = {
-        days: dexStats.ageDays,
-      };
-    }
+    const tokenAge =
+      dexStats.ageDays != null
+        ? { ageDays: dexStats.ageDays }
+        : { ageDays: null };
 
+    // -----------------------------------------------------------------
+    // Liquidity truth index (fake-liquidity suspicion)
+    // -----------------------------------------------------------------
     const liqUsd = dexStats.liquidityUsd;
-    const vol24 = dexStats.volume24Usd;
-    const tx24 = dexStats.txCount24;
+    const vol24 = dexStats.volume24Usd ?? null;
+    const txCount24 = dexStats.txCount24 ?? null;
 
-    let tradeToLiquidity = null;
-    let avgTradeUsd = null;
-    let liqTruthLevel = null;
+    let liqTruthLevel = "unknown";
     let liqTruthLabel = "Unknown";
     let liqTruthNote =
-      "Not enough volume / trade data to judge liquidity quality.";
+      "Not enough DEX data to judge whether liquidity is real or spoofed.";
+    let tradeToLiquidity = null;
+    let avgTradeUsd = null;
 
     if (
       liqUsd != null &&
+      !Number.isNaN(liqUsd) &&
       liqUsd > 0 &&
       vol24 != null &&
+      !Number.isNaN(vol24) &&
       vol24 > 0 &&
-      tx24 != null &&
-      tx24 > 0
+      txCount24 != null &&
+      !Number.isNaN(txCount24) &&
+      txCount24 > 0
     ) {
-      tradeToLiquidity = vol24 / liqUsd;
-      avgTradeUsd = vol24 / tx24;
+      tradeToLiquidity = vol24 / liqUsd; // how many times liquidity churned in 24h
+      avgTradeUsd = vol24 / txCount24;
 
-      if (tradeToLiquidity > 100 && tx24 < 50) {
+      // Heuristic:
+      // - very high volume vs liquidity + few trades  → likely wash / fake
+      // - moderate volume vs liquidity + modest trades → suspicious
+      // - otherwise → mostly real
+      if (tradeToLiquidity > 100 && txCount24 < 50) {
         liqTruthLevel = "high";
         liqTruthLabel = "Likely fake / wash";
         liqTruthNote =
-          "24h volume is huge vs liquidity but with very few trades – classic wash-trading pattern.";
-      } else if (tradeToLiquidity > 30 && tx24 < 150) {
+          "24h volume is extremely high versus liquidity with very few trades. This pattern often indicates wash trading or spoofed volume.";
+      } else if (tradeToLiquidity > 30 && txCount24 < 150) {
         liqTruthLevel = "medium";
         liqTruthLabel = "Suspicious";
         liqTruthNote =
-          "Volume is high relative to liquidity with only modest trade count.";
+          "24h volume is large relative to liquidity, but trade count is modest. Liquidity may be partially fake or heavily farmed.";
       } else {
         liqTruthLevel = "low";
         liqTruthLabel = "Mostly real";
         liqTruthNote =
-          "Volume and trade count look consistent with liquidity size.";
+          "Volume and trade count look consistent with liquidity size. No obvious fake-liquidity pattern detected.";
       }
     }
 
     const liquidityTruth = {
-      level: liqTruthLevel,
-      label: liqTruthLabel,
-      note: liqTruthNote,
-      tradeToLiquidity,
-      avgTradeUsd,
-      volume24Usd: vol24,
-      txCount24: tx24,
+      level: liqTruthLevel, // low / medium / high / unknown
+      label: liqTruthLabel, // short label for UI
+      note: liqTruthNote, // human-readable explanation
+      volume24Usd: vol24, // raw 24h volume
+      txCount24, // # trades (buys + sells)
+      tradeToLiquidity, // volume / liquidity ratio
+      avgTradeUsd, // average trade size
     };
 
-    // --- Stablecoin override ------------------------------------------
+    // -----------------------------------------------------------------
+    // Stablecoin special handling (whitelist)
+    // -----------------------------------------------------------------
+    const stableConfig = STABLECOIN_WHITELIST[mint];
 
-    const stable = STABLECOIN_WHITELIST[mint];
-    if (stable) {
-      originHint.label = `${stable.symbol} – centralized stablecoin`;
+    if (stableConfig) {
+      if (!tokenMeta.symbol) tokenMeta.symbol = stableConfig.symbol;
+      if (!tokenMeta.name || tokenMeta.name === "Unknown Token") {
+        tokenMeta.name = stableConfig.name;
+      }
+
+      originHint.label = "Known Solana stablecoin";
       originHint.detail =
-        `${stable.symbol} on Solana from a known issuer. ` +
-        "High holder concentration + active freeze authority are normal here.";
+        `${stableConfig.symbol} on Solana from a known centralized issuer. ` +
+        "High holder concentration and active freeze authority are normal for this type of token.";
 
       riskSummary.level = "low";
       riskSummary.score = 95;
       riskSummary.blurb =
-        "Whitelisted centralized stablecoin. Rug-style mint tricks are not the main risk.";
+        "This is a whitelisted centralized stablecoin on Solana. " +
+        "Issuer risk and smart contract risk still exist, but 'rug pull' style mint tricks " +
+        "are not the main concern. Distribution and freeze authority look scary but are expected.";
 
-      if (!tokenMetrics.priceUsd) tokenMetrics.priceUsd = 1.0;
+      if (
+        tokenMetrics.priceUsd == null ||
+        Number.isNaN(tokenMetrics.priceUsd)
+      ) {
+        tokenMetrics.priceUsd = 1.0;
+      }
     }
 
-    // --- Final JSON ----------------------------------------------------
-
+    // -----------------------------------------------------------------
+    // Final payload
+    // -----------------------------------------------------------------
     return res.status(200).json({
       tokenMeta,
       mintInfo,
+      mintAuthority,
+      freezeAuthority,
       holderSummary,
       insiderSummary,
-      insiderClusters,
       originHint,
       riskSummary,
       tokenMetrics,
       tokenAge,
       liquidityTruth,
-      socials: dexStats.socials,
     });
   } catch (err) {
-    console.error("GlassBox /api/check error:", err);
-    return res
-      .status(500)
-      .json({ error: err.message || "Internal server error" });
+    console.error("API /api/check error:", err);
+    return res.status(500).json({ error: err.message || "Internal error" });
   }
 }
