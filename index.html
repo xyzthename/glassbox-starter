@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,7 +18,6 @@
       --good: #22c55e;
       --chip-bg: rgba(15, 23, 42, 0.95);
       --chip-border: rgba(148, 163, 184, 0.7);
-      --toxic: #ef4444;
     }
 
     * { box-sizing: border-box; }
@@ -105,11 +103,8 @@
       line-height: 1.15;
     }
 
-    .hero-title span.clean {
+    .hero-title span {
       color: var(--accent);
-    }
-    .hero-title span.toxic {
-      color: var(--toxic);
     }
 
     .hero-sub {
@@ -326,22 +321,6 @@
     .result-top-right {
       font-size: 11px;
       color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .live-dot {
-      display: inline-block;
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: var(--good);
-      box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.4);
-    }
-    .live-dot.off {
-      background: var(--danger);
-      box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.4);
     }
 
     .token-header-row {
@@ -526,17 +505,13 @@
       border-color: rgba(56, 189, 248, 0.95);
     }
 
-    .origin-box {
+    .origin-note {
       margin-top: 6px;
-      border-radius: 10px;
-      background: #020617;
-      border: 1px dashed rgba(31, 41, 55, 0.9);
-      padding: 6px 8px;
       font-size: 11px;
       color: var(--text-muted);
     }
 
-    .origin-box b {
+    .origin-note b {
       color: var(--accent);
     }
 
@@ -568,7 +543,6 @@
       gap: 6px;
       flex-wrap: wrap;
       font-size: 11px;
-      align-items: center;
     }
 
     .btn-ghost {
@@ -582,7 +556,6 @@
       gap: 4px;
       cursor: pointer;
       font-size: 11px;
-      text-decoration: none;
     }
 
     .jup-btn {
@@ -632,7 +605,7 @@
             </div>
             <div class="hero-title">
               Paste a Solana token mint.<br />
-              See if it’s <span class="clean">clean</span> or <span class="toxic">toxic</span> in seconds.
+              See if it’s <span>clean</span> or toxic in seconds.
             </div>
             <div class="hero-sub">
               No wallet connect. No signup. Just an instant on-chain safety read on any SPL token mint.
@@ -660,10 +633,12 @@
                 <div>We never see or store your wallet or keys. Only mint + public on-chain data.</div>
               </div>
 
-              <!-- recent scans -->
+              <!-- clickable recent scans row -->
               <div class="recent-wrap">
                 <div class="recent-label">Recent scans</div>
-                <div id="recentRow" class="risk-pills"></div>
+                <div id="recentRow" class="risk-pills">
+                  <!-- filled by JS -->
+                </div>
               </div>
             </div>
 
@@ -681,10 +656,10 @@
               <div style="font-size:12px;color:var(--text-muted);">
                 Paste a Solana token mint on the left and hit <b>Scan</b> to see:
                 <ul style="padding-left:18px;margin:4px 0;">
-                  <li>Mint / freeze authority status</li>
-                  <li>Holder concentration + insider clusters</li>
-                  <li>Liquidity truth and lock % bands</li>
-                  <li>Likely origin (Pump.fun, stables, etc.)</li>
+                  <li>Mint + freeze authority status</li>
+                  <li>Holder concentration and insider clusters</li>
+                  <li>Liquidity truth (real vs spoofed)</li>
+                  <li>Origin hints (Pump.fun, stables, etc.)</li>
                 </ul>
                 Then route to Jupiter, DexScreener, Axiom, Photon, BullX, Parde, Solpump, or Stalk.fun in one tap.
               </div>
@@ -697,7 +672,7 @@
   </div>
 
   <script>
-    /* ====== YOUR AFFILIATE / REF LINKS ====== */
+    /* ====== YOUR AFFILIATE / REF LINKS (from your message) ====== */
     const JUP_REF   = "3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG";
     const AXIOM_URL = "https://axiom.trade/@dudexyz";
     const BULLX_URL = "https://t.me/BullxBetaBot?start=access_N3OJF4TE16J";
@@ -705,7 +680,7 @@
     const PHOTON_URL = "https://photon-sol.tinyastro.io/@xyzthegod";
     const STALK_URL  = "https://stalk.fun/?r=ZATEZOJI";
     const SOLPUMP_URL = "https://solpump.io/a/DUDEXYZ";
-    /* ========================================= */
+    /* ============================================================ */
 
     const API_BASE = "/api/check";
 
@@ -806,7 +781,6 @@
     function renderError(msg) {
       errorBox.style.display = "block";
       errorBox.textContent = msg || "Something went wrong.";
-      updateLiveDot(false);
     }
 
     function clearError() {
@@ -828,14 +802,7 @@
       return "chip";
     }
 
-    function updateLiveDot(ok) {
-      const el = document.getElementById("liveDot");
-      if (!el) return;
-      if (ok) el.classList.remove("off");
-      else el.classList.add("off");
-    }
-
-    // recent history
+    // recent-scans helpers
     function saveRecentMint(mint, symbol, riskLevel) {
       try {
         const labelSymbol = (symbol || "").toUpperCase();
@@ -854,24 +821,20 @@
         if (arr.length > MAX_RECENT) arr = arr.slice(0, MAX_RECENT);
         localStorage.setItem(RECENT_KEY, JSON.stringify(arr));
         renderRecentMints(arr);
-      } catch {}
+      } catch {
+        // ignore localStorage errors
+      }
     }
 
     function loadRecentMints() {
       try {
         const raw = localStorage.getItem(RECENT_KEY);
-        if (!raw) {
-          recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
-          return;
-        }
+        if (!raw) return;
         const arr = JSON.parse(raw);
-        if (!Array.isArray(arr) || !arr.length) {
-          recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
-          return;
-        }
+        if (!Array.isArray(arr)) return;
         renderRecentMints(arr);
       } catch {
-        recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+        // ignore
       }
     }
 
@@ -899,7 +862,9 @@
             item.symbol || (idx + 1) + " · " + riskLabel;
 
           return `<button type="button" class="${cls}" data-mint="${item.mint}">
-                    <span class="risk-pill-dot ${item.risk === "high" ? "red" : ""}"></span>
+                    <span class="risk-pill-dot ${
+                      item.risk === "high" ? "red" : ""
+                    }"></span>
                     <span>${label}</span>
                   </button>`;
         })
@@ -910,16 +875,16 @@
       const {
         tokenMeta,
         mintInfo,
-        mintAuthority,
         freezeAuthority,
+        mintAuthority,
         holderSummary,
         insiderSummary,
+        insiderClusters,
         originHint,
         riskSummary,
         tokenMetrics,
         tokenAge,
         liquidityTruth,
-        socials, // NEW: from backend
       } = data;
 
       const name = tokenMeta?.name || "Unknown Token";
@@ -967,7 +932,7 @@
       const scoreRaw = typeof riskSummary?.score === "number" ? riskSummary.score : null;
       const score = scoreRaw != null ? Math.max(0, Math.min(100, scoreRaw)) : null;
 
-      const ic = data.insiderClusters || {};
+      const ic = insiderClusters || {};
       const clusterRisk = ic.riskLevel || "low";
       const clusterNote =
         ic.note || "No strong funding-based insider clusters detected among sampled holders.";
@@ -990,41 +955,10 @@
           ? Math.max(0, Math.min(100, top10Pct))
           : null;
 
-      // Origin box text (Pump.fun note if applicable)
-      const originLabel = originHint?.label || "Unknown protocol / origin";
-      let originDetail =
-        originHint?.detail ||
-        "Origin could not be confidently determined from mint pattern.";
-
-      const lowerOriginLabel = originLabel.toLowerCase();
-      if (lowerOriginLabel.includes("pump.fun") && !lowerOriginLabel.includes("amm")) {
-        originDetail +=
-          " Pump.fun launches usually come with locked LP, but always double-check lock Tx + pair.";
-      }
-
-      // Social pill (comes from backend DexScreener info)
-      let socialLabel = null;
-      let socialUrl = null;
-      if (socials) {
-        if (socials.twitter) {
-          socialLabel = "View tweet / X";
-          socialUrl = socials.twitter;
-        } else if (socials.website) {
-          socialLabel = "Visit website";
-          socialUrl = socials.website;
-        } else if (socials.telegram) {
-          socialLabel = "Open Telegram";
-          socialUrl = socials.telegram;
-        } else if (socials.tiktok) {
-          socialLabel = "View TikTok";
-          socialUrl = socials.tiktok;
-        }
-      }
-
-      // Route URLs with Jupiter referral
-      const jupUrl = `https://jup.ag/swap/SOL-${encodeURIComponent(
-        mint
-      )}?referrer=${encodeURIComponent(JUP_REF)}`;
+      // Route URLs using your constants
+      const jupUrl = `https://jup.ag/swap/SOL-${encodeURIComponent(mint)}?ref=${encodeURIComponent(
+        JUP_REF
+      )}`;
       const dexsUrl = `https://dexscreener.com/solana/${mint}`;
       const axiomUrl = AXIOM_URL;
       const photonUrl = PHOTON_URL;
@@ -1040,10 +974,7 @@
             <span>•</span>
             <span>${riskLabel}</span>
           </div>
-          <div class="result-top-right">
-            <span id="liveDot" class="live-dot"></span>
-            <span>Live on-chain scan</span>
-          </div>
+          <div class="result-top-right">Live on-chain scan</div>
         </div>
 
         <div class="token-header-row">
@@ -1226,9 +1157,9 @@
           }
         </div>
 
-        <div class="origin-box">
-          <b>${originLabel}</b>
-          ${originDetail ? " – " + originDetail : ""}
+        <div class="origin-note">
+          <b>${originHint?.label || "Unknown protocol / origin"}</b>
+          ${originHint?.detail ? " · " + originHint.detail : ""}
         </div>
 
         <div class="tools-row">
@@ -1236,20 +1167,15 @@
           <a class="tool-pill" href="${axiomUrl}" target="_blank" rel="noopener noreferrer">🧠 Axiom</a>
           <a class="tool-pill" href="${photonUrl}" target="_blank" rel="noopener noreferrer">⚡ Photon</a>
           <a class="tool-pill" href="${bullxUrl}" target="_blank" rel="noopener noreferrer">🐂 BullX</a>
-          <a class="tool-pill" href="${pardeUrl}" target="_blank" rel="noopener noreferrer">⚙️ Parde</a>
+          <a class="tool-pill" href="${pardeUrl}" target="_blank" rel="noopener noreferrer">⚙️ Padre</a>
           <a class="tool-pill" href="${solpumpUrl}" target="_blank" rel="noopener noreferrer">💧 Solpump</a>
           <a class="tool-pill" href="${stalkUrl}" target="_blank" rel="noopener noreferrer">🕵️ Stalk.fun</a>
         </div>
 
         <div class="bottom-row">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button id="copyMintBtn" class="btn-ghost">📋 Copy mint</button>
             <button id="copySummaryBtn" class="btn-ghost">🧾 Copy summary</button>
-            ${
-              socialLabel && socialUrl
-                ? `<a href="${socialUrl}" target="_blank" rel="noopener noreferrer" class="btn-ghost">📣 ${socialLabel}</a>`
-                : ""
-            }
           </div>
           <button id="jupBtn" class="jup-btn">
             <span class="jup-icon"></span>
@@ -1257,8 +1183,6 @@
           </button>
         </div>
       `;
-
-      updateLiveDot(true); // successful scan
 
       const jupBtn = document.getElementById("jupBtn");
       if (jupBtn) {
@@ -1268,7 +1192,9 @@
       const copyMintBtn = document.getElementById("copyMintBtn");
       if (copyMintBtn) {
         copyMintBtn.onclick = async () => {
-          try { await navigator.clipboard.writeText(mint); } catch {}
+          try {
+            await navigator.clipboard.writeText(mint);
+          } catch {}
         };
       }
 
@@ -1280,10 +1206,13 @@
           }\nInsiders: ${
             insiderTotalPct != null ? insiderTotalPct.toFixed(1) + "%" : "N/A"
           }\nCluster: ${clusterRisk} – ${clusterHeadline}`;
-          try { await navigator.clipboard.writeText(summary); } catch {}
+          try {
+            await navigator.clipboard.writeText(summary);
+          } catch {}
         };
       }
 
+      // update recent history row after successful render
       saveRecentMint(mint, symbol, riskLevel);
     }
 
