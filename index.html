@@ -21,44 +21,52 @@
       --toxic: #ef4444;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-      background:
-        radial-gradient(circle at top, #111827 0, #05060a 40%),
-        radial-gradient(circle at bottom, #020617 0, #000 55%);
-      color: var(--text-main);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Inter", sans-serif;
+      background: radial-gradient(circle at top, #061021 0%, #020308 55%, #000 100%);
+      color: #f9fafb;
       display: flex;
       justify-content: center;
       align-items: stretch;
       padding: 20px;
+      position: relative;
+    }
+
+    .glass-cracks-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: url("/glass-cracks.png");
+      background-size: cover;
+      background-position: center;
+      opacity: 0.22;
+      mix-blend-mode: screen;
+      z-index: 0;
     }
 
     .app {
       width: 100%;
       max-width: 1200px;
       margin: auto;
+      position: relative;
+      z-index: 1;
     }
-    .glass-cracks-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("/glass-cracks.png");
-  background-size: cover;
-  background-position: center;
-  opacity: 0.22;
-  mix-blend-mode: screen;
-  z-index: 0;
-}
-
 
     .frame {
       border-radius: 24px;
       padding: 1px;
-      background: linear-gradient(135deg, rgba(22, 242, 154, 0.35), rgba(59, 130, 246, 0.2));
+      background: linear-gradient(
+        135deg,
+        rgba(22, 242, 154, 0.35),
+        rgba(59, 130, 246, 0.2)
+      );
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
     }
 
@@ -129,44 +137,20 @@
       color: var(--text-muted);
       max-width: 380px;
     }
+
     .hero-logo-wrapper {
-    margin-top: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .hero-logo {
-    max-width: 160px;
-    height: auto;
-    opacity: 0.9;
-    filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.3));
+      max-width: 160px;
+      height: auto;
+      opacity: 0.9;
+      filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.3));
     }
-
-    body {
-  position: relative;
-  background: radial-gradient(circle at top, #061021 0%, #020308 55%, #000 100%);
-  color: #f9fafb;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Inter", sans-serif;
-}
-
-.glass-cracks-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("/glass-cracks.png");
-  background-size: cover;
-  background-position: center;
-  opacity: 0.22;
-  mix-blend-mode: screen;
-  z-index: 0;
-}
-
-.shell-root { /* or whatever your main wrapper class is */
-  position: relative;
-  z-index: 1; /* keep app above the cracks */
-}
 
     .mint-card {
       margin-top: 10px;
@@ -388,6 +372,7 @@
       background: var(--good);
       box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.4);
     }
+
     .live-dot.off {
       background: var(--danger);
       box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.4);
@@ -653,6 +638,9 @@
       border-radius: 999px;
       background: radial-gradient(circle at 30% 30%, #16f29a, #16a34a 60%, #020617);
       box-shadow: 0 0 0 1px rgba(22, 242, 154, 0.85);
+      /* If you prefer an actual Jupiter logo image, swap with:
+         background-image:url('/jupiter-logo.png'); background-size:cover; background-position:center;
+      */
     }
 
     .error-box {
@@ -668,7 +656,8 @@
   </style>
 </head>
 <body>
-<div class="glass-cracks-overlay"></div>
+  <div class="glass-cracks-overlay"></div>
+
   <div class="app">
     <div class="frame">
       <div class="inner">
@@ -698,7 +687,7 @@
                   id="mintInput"
                   class="mint-input"
                   type="text"
-                  placeholder="Ex: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1 (USDC)"
+                  placeholder="Ex: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (USDC)"
                 />
                 <button id="scanBtn" class="btn-scan">
                   <span id="scanBtnLabel">Scan</span>
@@ -739,7 +728,7 @@
                   <li>Liquidity truth and lock % bands</li>
                   <li>Likely origin (Pump.fun, stables, etc.)</li>
                 </ul>
-                Then route to Jupiter, DexScreener, Axiom, Photon, BullX, Parde, Solpump, or Stalk.fun in one tap.
+                Then route to Jupiter, DexScreener, Axiom, Photon, BullX, Padre, Solpump, or Stalk.fun in one tap.
               </div>
             </div>
             <div id="errorBox" class="error-box"></div>
@@ -751,24 +740,24 @@
 
   <script>
     /* ====== YOUR AFFILIATE / REF LINKS ====== */
-    const JUP_REF   = "3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG";
-    const AXIOM_URL = "https://axiom.trade/@dudexyz";
-    const BULLX_URL = "https://t.me/BullxBetaBot?start=access_N3OJF4TE16J";
-    const PARDE_URL = "https://trade.padre.gg/rk/dudexyz";
-    const PHOTON_URL = "https://photon-sol.tinyastro.io/@xyzthegod";
-    const STALK_URL  = "https://stalk.fun/?r=ZATEZOJI";
+    const JUP_REF     = "3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG";
+    const AXIOM_URL   = "https://axiom.trade/@dudexyz";
+    const BULLX_URL   = "https://t.me/BullxBetaBot?start=access_N3OJF4TE16J";
+    const PARDE_URL   = "https://trade.padre.gg/rk/dudexyz";
+    const PHOTON_URL  = "https://photon-sol.tinyastro.io/@xyzthegod";
+    const STALK_URL   = "https://stalk.fun/?r=ZATEZOJI";
     const SOLPUMP_URL = "https://solpump.io/a/DUDEXYZ";
     /* ========================================= */
 
     const API_BASE = "/api/check";
 
-    const mintInput = document.getElementById("mintInput");
-    const scanBtn = document.getElementById("scanBtn");
-    const scanBtnLabel = document.getElementById("scanBtnLabel");
-    const scanBtnSpinner = document.getElementById("scanBtnSpinner");
-    const resultBox = document.getElementById("resultBox");
-    const errorBox = document.getElementById("errorBox");
-    const recentRow = document.getElementById("recentRow");
+    const mintInput       = document.getElementById("mintInput");
+    const scanBtn         = document.getElementById("scanBtn");
+    const scanBtnLabel    = document.getElementById("scanBtnLabel");
+    const scanBtnSpinner  = document.getElementById("scanBtnSpinner");
+    const resultBox       = document.getElementById("resultBox");
+    const errorBox        = document.getElementById("errorBox");
+    const recentRow       = document.getElementById("recentRow");
 
     const RECENT_KEY = "glassbox_recent_mints";
     const MAX_RECENT = 5;
@@ -831,41 +820,41 @@
     }
 
     function formatAge(tokenAge) {
-  if (!tokenAge || tokenAge.days == null) return { main: "N/A", sub: "" };
+      if (!tokenAge || tokenAge.days == null) return { main: "N/A", sub: "" };
 
-  const days = tokenAge.days;
-  const totalMinutes = days * 24 * 60;
+      const days = tokenAge.days;
+      const totalMinutes = days * 24 * 60;
 
-  // < 1 hour → minutes
-  if (totalMinutes < 60) {
-    const mins = Math.max(1, Math.floor(totalMinutes));
-    return { main: `${mins}m`, sub: "" };
-  }
+      // < 1 hour → minutes
+      if (totalMinutes < 60) {
+        const mins = Math.max(1, Math.floor(totalMinutes));
+        return { main: `${mins}m`, sub: "" };
+      }
 
-  const totalHours = days * 24;
+      const totalHours = days * 24;
 
-  // < 1 day → hours
-  if (totalHours < 24) {
-    const hrs = Math.floor(totalHours);
-    return { main: `${hrs}h`, sub: "" };
-  }
+      // < 1 day → hours
+      if (totalHours < 24) {
+        const hrs = Math.floor(totalHours);
+        return { main: `${hrs}h`, sub: "" };
+      }
 
-  // < 2 weeks → days
-  if (days < 14) {
-    const d = Math.floor(days);
-    return { main: `${d}d`, sub: "" };
-  }
+      // < 2 weeks → days
+      if (days < 14) {
+        const d = Math.floor(days);
+        return { main: `${d}d`, sub: "" };
+      }
 
-  // < 1 year → months + days
-  if (days < 365) {
-    const months = (days / 30).toFixed(1);
-    return { main: `${months}m`, sub: `≈ ${Math.floor(days)} days` };
-  }
+      // < 1 year → months + days
+      if (days < 365) {
+        const months = (days / 30).toFixed(1);
+        return { main: `${months}m`, sub: `≈ ${Math.floor(days)} days` };
+      }
 
-  // ≥ 1 year → years + days
-  const years = (days / 365).toFixed(1);
-  return { main: `${years}y`, sub: `≈ ${Math.floor(days)} days` };
-}
+      // ≥ 1 year → years + days
+      const years = (days / 365).toFixed(1);
+      return { main: `${years}y`, sub: `≈ ${Math.floor(days)} days` };
+    }
 
     function renderError(msg) {
       errorBox.style.display = "block";
@@ -918,31 +907,35 @@
         if (arr.length > MAX_RECENT) arr = arr.slice(0, MAX_RECENT);
         localStorage.setItem(RECENT_KEY, JSON.stringify(arr));
         renderRecentMints(arr);
-      } catch {}
+      } catch (_) {}
     }
 
     function loadRecentMints() {
       try {
         const raw = localStorage.getItem(RECENT_KEY);
         if (!raw) {
-          recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+          recentRow.innerHTML =
+            '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
           return;
         }
         const arr = JSON.parse(raw);
         if (!Array.isArray(arr) || !arr.length) {
-          recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+          recentRow.innerHTML =
+            '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
           return;
         }
         renderRecentMints(arr);
-      } catch {
-        recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+      } catch (_) {
+        recentRow.innerHTML =
+          '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
       }
     }
 
     function renderRecentMints(arr) {
       if (!recentRow) return;
       if (!arr || !arr.length) {
-        recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+        recentRow.innerHTML =
+          '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
         return;
       }
       recentRow.innerHTML = arr
@@ -959,8 +952,7 @@
               ? "Safe"
               : "Watch";
 
-          const label =
-            item.symbol || (idx + 1) + " · " + riskLabel;
+          const label = item.symbol || (idx + 1) + " · " + riskLabel;
 
           return `<button type="button" class="${cls}" data-mint="${item.mint}">
                     <span class="risk-pill-dot ${item.risk === "high" ? "red" : ""}"></span>
@@ -974,8 +966,6 @@
       const {
         tokenMeta,
         mintInfo,
-        mintAuthority,
-        freezeAuthority,
         holderSummary,
         insiderSummary,
         originHint,
@@ -983,7 +973,8 @@
         tokenMetrics,
         tokenAge,
         liquidityTruth,
-        socials, // NEW: from backend
+        socials,
+        insiderClusters,
       } = data;
 
       const name = tokenMeta?.name || "Unknown Token";
@@ -998,12 +989,13 @@
         rawSupply != null ? Number(rawSupply) / Math.pow(10, decimals || 0) : null;
 
       const holdersCount = holderSummary?.holdersCount ?? null;
-      const top10Pct = holderSummary?.top10PctExcludingLP ?? holderSummary?.top10Pct ?? null;
+      const top10Pct =
+        holderSummary?.top10PctExcludingLP ?? holderSummary?.top10Pct ?? null;
       const lpHolder = holderSummary?.lpHolder || null;
       const topHolders = holderSummary?.topHolders || [];
 
-      const renouncedMint = !mintAuthority;
-      const canFreeze = !!freezeAuthority;
+      const renouncedMint = !mintInfo?.mintAuthority;
+      const canFreeze = !!mintInfo?.freezeAuthority;
 
       const liqTruthLevel = liquidityTruth?.level || "unknown";
       const liqTruthLabel = liquidityTruth?.label || "Unknown";
@@ -1028,13 +1020,17 @@
       else if (riskLevel === "medium") riskLabel = "Medium risk";
       else if (riskLevel === "high") riskLabel = "High rug risk";
 
-      const scoreRaw = typeof riskSummary?.score === "number" ? riskSummary.score : null;
-      const score = scoreRaw != null ? Math.max(0, Math.min(100, scoreRaw)) : null;
+      const scoreRaw =
+        typeof riskSummary?.score === "number" ? riskSummary.score : null;
+      const score =
+        scoreRaw != null ? Math.max(0, Math.min(100, scoreRaw)) : null;
 
-      const ic = data.insiderClusters || {};
-      const clusterRisk = ic.riskLevel || "low";
+      const ic = insiderClusters || {};
+      const clusterRisk = ic.riskLevel || insiderSummary?.riskLevel || "low";
       const clusterNote =
-        ic.note || "No strong funding-based insider clusters detected among sampled holders.";
+        ic.note ||
+        insiderSummary?.note ||
+        "No strong funding-based insider clusters detected among sampled holders.";
       const largestCluster = ic.largestCluster || null;
       const insiderTotalPct = insiderSummary?.insidersTotalPct ?? null;
 
@@ -1047,6 +1043,10 @@
         ? `${largestCluster.holderAddresses.length} wallets via ${shortAddr(
             largestCluster.funder
           )} · ~${largestCluster.pctOfSupply.toFixed(1)}%`
+        : insiderSummary?.largestInsider
+        ? `Largest insider ${shortAddr(
+            insiderSummary.largestInsider.address
+          )} · ~${insiderSummary.largestInsider.pct.toFixed(1)}%`
         : "No strong cluster among sampled holders.";
 
       const top10BarWidth =
@@ -1054,19 +1054,12 @@
           ? Math.max(0, Math.min(100, top10Pct))
           : null;
 
-      // Origin box text (Pump.fun note if applicable)
       const originLabel = originHint?.label || "Unknown protocol / origin";
-      let originDetail =
+      const originDetail =
         originHint?.detail ||
         "Origin could not be confidently determined from mint pattern.";
 
-      const lowerOriginLabel = originLabel.toLowerCase();
-      if (lowerOriginLabel.includes("pump.fun") && !lowerOriginLabel.includes("amm")) {
-        originDetail +=
-          " Pump.fun launches usually come with locked LP, but always double-check lock Tx + pair.";
-      }
-
-      // Social pill (comes from backend DexScreener info)
+      // Social pill (from backend DexScreener info)
       let socialLabel = null;
       let socialUrl = null;
       if (socials) {
@@ -1079,9 +1072,6 @@
         } else if (socials.telegram) {
           socialLabel = "Open Telegram";
           socialUrl = socials.telegram;
-        } else if (socials.tiktok) {
-          socialLabel = "View TikTok";
-          socialUrl = socials.tiktok;
         }
       }
 
@@ -1089,12 +1079,12 @@
       const jupUrl = `https://jup.ag/swap/SOL-${encodeURIComponent(
         mint
       )}?referrer=${encodeURIComponent(JUP_REF)}`;
-      const dexsUrl = `https://dexscreener.com/solana/${mint}`;
-      const axiomUrl = AXIOM_URL;
+      const dexsUrl   = `https://dexscreener.com/solana/${mint}`;
+      const axiomUrl  = AXIOM_URL;
       const photonUrl = PHOTON_URL;
-      const bullxUrl = BULLX_URL;
-      const pardeUrl = PARDE_URL;
-      const stalkUrl = STALK_URL;
+      const bullxUrl  = BULLX_URL;
+      const pardeUrl  = PARDE_URL;
+      const stalkUrl  = STALK_URL;
       const solpumpUrl = SOLPUMP_URL;
 
       resultBox.innerHTML = `
@@ -1135,7 +1125,9 @@
         <div style="margin:6px 0 4px 0;">
           <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:2px;">
             <span>GlassBox scam score (0–100)</span>
-            <span style="color:var(--accent);font-weight:600;">${score.toFixed(0)}/100</span>
+            <span style="color:var(--accent);font-weight:600;">${score.toFixed(
+              0
+            )}/100</span>
           </div>
           <div style="height:6px;border-radius:999px;background:#020617;border:1px solid rgba(31,41,55,0.9);overflow:hidden;">
             <div style="height:100%;width:${score}%;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444);"></div>
@@ -1152,7 +1144,9 @@
           </div>
           <div class="metric">
             <div class="metric-label">Liquidity</div>
-            <div class="metric-value">${formatUsd(tokenMetrics?.liquidityUsd)}</div>
+            <div class="metric-value">${formatUsd(
+              tokenMetrics?.liquidityUsd
+            )}</div>
           </div>
           <div class="metric">
             <div class="metric-label">Supply</div>
@@ -1200,7 +1194,11 @@
             <div class="info-row">
               <span class="info-label">Liquidity truth</span>
               <span class="${chipClass(
-                liqTruthLevel === "low" ? "good" : liqTruthLevel === "high" ? "bad" : "warn"
+                liqTruthLevel === "low"
+                  ? "good"
+                  : liqTruthLevel === "high"
+                  ? "bad"
+                  : "warn"
               )}" title="${liqTruthNote.replace(/"/g, "&quot;")}">
                 ${liqTruthLabel}
               </span>
@@ -1242,9 +1240,13 @@
                   : "bad"
               )}">
                 ${
-                  insiderSummary?.insiderCount ?? 0
+                  insiderSummary?.insiderWalletCount ??
+                  insiderSummary?.insidersAll?.length ??
+                  0
                 } wallets · ${
-        insiderTotalPct != null ? insiderTotalPct.toFixed(1) + "%" : "N/A"
+        insiderTotalPct != null
+          ? insiderTotalPct.toFixed(1) + "%"
+          : "N/A"
       }
               </span>
             </div>
@@ -1274,14 +1276,18 @@
               ? `<div class="holder-list">
                   ${topHolders
                     .map((h, idx) => {
-                      const isLp = lpHolder && lpHolder.address === h.address;
+                      const isLp =
+                        lpHolder && lpHolder.address === h.address;
                       return `<a href="https://solscan.io/account/${h.address}"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 class="holder-pill ${isLp ? "lp" : ""}">
-                                ${String(idx + 1).padStart(2, "0")}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%${
-                        isLp ? " · LP" : ""
-                      }
+                                ${String(idx + 1).padStart(
+                                  2,
+                                  "0"
+                                )}. ${shortAddr(h.address)} · ${h.pct.toFixed(
+                        2
+                      )}%${isLp ? " · LP" : ""}
                               </a>`;
                     })
                     .join("")}
@@ -1300,7 +1306,7 @@
           <a class="tool-pill" href="${axiomUrl}" target="_blank" rel="noopener noreferrer">🧠 Axiom</a>
           <a class="tool-pill" href="${photonUrl}" target="_blank" rel="noopener noreferrer">⚡ Photon</a>
           <a class="tool-pill" href="${bullxUrl}" target="_blank" rel="noopener noreferrer">🐂 BullX</a>
-          <a class="tool-pill" href="${pardeUrl}" target="_blank" rel="noopener noreferrer">⚙️ Parde</a>
+          <a class="tool-pill" href="${pardeUrl}" target="_blank" rel="noopener noreferrer">⚙️ Padre</a>
           <a class="tool-pill" href="${solpumpUrl}" target="_blank" rel="noopener noreferrer">💧 Solpump</a>
           <a class="tool-pill" href="${stalkUrl}" target="_blank" rel="noopener noreferrer">🕵️ Stalk.fun</a>
         </div>
@@ -1326,13 +1332,16 @@
 
       const jupBtn = document.getElementById("jupBtn");
       if (jupBtn) {
-        jupBtn.onclick = () => window.open(jupUrl, "_blank", "noopener,noreferrer");
+        jupBtn.onclick = () =>
+          window.open(jupUrl, "_blank", "noopener,noreferrer");
       }
 
       const copyMintBtn = document.getElementById("copyMintBtn");
       if (copyMintBtn) {
         copyMintBtn.onclick = async () => {
-          try { await navigator.clipboard.writeText(mint); } catch {}
+          try {
+            await navigator.clipboard.writeText(mint);
+          } catch (_) {}
         };
       }
 
@@ -1342,61 +1351,74 @@
           const summary = `${name} (${symbol || "no symbol"})\nMint: ${mint}\nRisk: ${
             riskLabel
           }\nInsiders: ${
-            insiderTotalPct != null ? insiderTotalPct.toFixed(1) + "%" : "N/A"
-          }\nCluster: ${clusterRisk} – ${clusterHeadline}`;
-          try { await navigator.clipboard.writeText(summary); } catch {}
+            insiderTotalPct != null
+              ? insiderTotalPct.toFixed(1) + "%"
+              : "N/A"
+          }`;
+          try {
+            await navigator.clipboard.writeText(summary);
+          } catch (_) {}
         };
       }
-
-      saveRecentMint(mint, symbol, riskLevel);
     }
 
-    async function handleScan() {
-      const mint = (mintInput.value || "").trim();
+    async function doScan(mintRaw) {
+      const mint = (mintRaw || "").trim();
       if (!mint) {
-        renderError("Paste a valid Solana token mint address.");
+        renderError("Please paste a valid Solana mint address.");
         return;
       }
       clearError();
       setLoading(true);
       try {
-        const res = await fetch(API_BASE + "?mint=" + encodeURIComponent(mint));
-        const data = await res.json();
+        const res = await fetch(`${API_BASE}?mint=${encodeURIComponent(mint)}`);
         if (!res.ok) {
-          throw new Error(data?.error || "Backend error");
+          const txt = await res.text();
+          let msg = "Scan failed.";
+          try {
+            const j = JSON.parse(txt);
+            if (j.error) msg = j.error;
+          } catch (_) {}
+          renderError(msg);
+        } else {
+          const data = await res.json();
+          render(data, mint);
+          const symbol = data?.tokenMeta?.symbol || "";
+          const risk = data?.riskSummary?.level || "unknown";
+          saveRecentMint(mint, symbol, risk);
         }
-        render(data, mint);
       } catch (e) {
-        console.error(e);
-        renderError(e.message || "Failed to scan this mint.");
+        renderError("Network error while scanning mint.");
       } finally {
         setLoading(false);
       }
     }
 
-    scanBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      handleScan();
+    // Event wiring
+    scanBtn.addEventListener("click", () => {
+      doScan(mintInput.value);
     });
 
     mintInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        handleScan();
+        doScan(mintInput.value);
       }
     });
 
     if (recentRow) {
       recentRow.addEventListener("click", (e) => {
-        const pill = e.target.closest(".risk-pill");
-        if (!pill) return;
-        const mint = pill.dataset.mint;
-        if (!mint) return;
-        mintInput.value = mint;
-        handleScan();
+        const btn = e.target.closest("button[data-mint]");
+        if (!btn) return;
+        const mint = btn.getAttribute("data-mint");
+        if (mint) {
+          mintInput.value = mint;
+          doScan(mint);
+        }
       });
     }
 
+    // On load
     loadRecentMints();
   </script>
 </body>
