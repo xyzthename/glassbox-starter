@@ -123,29 +123,21 @@ async function safeGetLargestAccounts(mint) {
   }
 }
 
-// Count unique wallets holding a non-zero balance of this mint
+// NEW: more honest holder count – uses getTokenAccountsByMint,
+// returns null on failure instead of faking a value.
 async function safeCountTokenHolders(mint) {
   try {
     const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
-    const result = await heliusRpc("getProgramAccounts", [
-      TOKEN_PROGRAM_ID,
+    const result = await heliusRpc("getTokenAccountsByMint", [
+      mint,
       {
-        commitment: "processed",
+        programId: TOKEN_PROGRAM_ID,
         encoding: "jsonParsed",
-        filters: [
-          { dataSize: 165 },
-          {
-            memcmp: {
-              offset: 0,
-              bytes: mint,
-            },
-          },
-        ],
       },
     ]);
 
-    const accounts = Array.isArray(result) ? result : [];
+    const accounts = Array.isArray(result?.value) ? result.value : [];
     const owners = new Set();
 
     for (const acc of accounts) {
@@ -737,8 +729,9 @@ export default async function handler(req, res) {
       note: insiderNote,
     };
 
+    // NOTE: we do NOT fake holders count anymore.
     const effectiveHoldersCount =
-      holdersCount != null ? holdersCount : allHolders.length;
+      holdersCount != null ? holdersCount : null;
 
     const holderSummary = {
       top10Pct,
@@ -879,7 +872,7 @@ export default async function handler(req, res) {
       txCount24,
       tradeToLiquidity,
       avgTradeUsd,
-      lockPercent: null, // still unknown for now
+      lockPercent: null, // still unknown for now (we'll build our own LP lock engine later)
     };
 
     // -----------------------------------------------------------------
@@ -916,7 +909,7 @@ export default async function handler(req, res) {
       mintAuthority,
       holderSummary,
       insiderSummary,
-      insiderClusters, // NEW
+      insiderClusters, // NEW (frontend ignores for now)
       originHint,
       riskSummary,
       tokenMetrics,
