@@ -830,41 +830,42 @@
       return "$" + (n / 1_000_000_000).toFixed(2).replace(/0+$/, "").replace(/\.$/, "") + "B";
     }
 
-    function formatTokenAge(tokenAge) {
-  if (!tokenAge || tokenAge.days == null) return "N/A";
+    function formatAge(tokenAge) {
+  if (!tokenAge || tokenAge.days == null) return { main: "N/A", sub: "" };
 
   const days = tokenAge.days;
   const totalMinutes = days * 24 * 60;
 
+  // < 1 hour → minutes
   if (totalMinutes < 60) {
-    // < 1h → minutes
     const mins = Math.max(1, Math.floor(totalMinutes));
-    return `${mins}m`;
+    return { main: `${mins}m`, sub: "" };
   }
 
   const totalHours = days * 24;
+
+  // < 1 day → hours
   if (totalHours < 24) {
-    // < 1d → hours
     const hrs = Math.floor(totalHours);
-    return `${hrs}h`;
+    return { main: `${hrs}h`, sub: "" };
   }
 
+  // < 2 weeks → days
   if (days < 14) {
     const d = Math.floor(days);
-    return `${d}d`;
+    return { main: `${d}d`, sub: "" };
   }
 
-  const weeks = Math.floor(days / 7);
-  return `${weeks}w`;
-}
+  // < 1 year → months + days
+  if (days < 365) {
+    const months = (days / 30).toFixed(1);
+    return { main: `${months}m`, sub: `≈ ${Math.floor(days)} days` };
+  }
 
-      if (days < 365) {
-        const months = (days / 30).toFixed(1);
-        return { main: months + "m", sub: "≈ " + Math.floor(days) + " days" };
-      }
-      const years = (days / 365).toFixed(1);
-      return { main: years + "y", sub: "≈ " + Math.floor(days) + " days" };
-    }
+  // ≥ 1 year → years + days
+  const years = (days / 365).toFixed(1);
+  return { main: `${years}y`, sub: `≈ ${Math.floor(days)} days` };
+}
 
     function renderError(msg) {
       errorBox.style.display = "block";
