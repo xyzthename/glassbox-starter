@@ -201,7 +201,6 @@
       font-size: 10px;
     }
 
-    /* Recent scan pills – clickable, styled like OG badges */
     .recent-wrap {
       margin-top: 8px;
     }
@@ -662,7 +661,7 @@
                   <li>Liquidity truth (real vs spoofed)</li>
                   <li>Origin hints (Pump.fun, stables, etc.)</li>
                 </ul>
-                Then route to Jupiter, DexScreener, Axiom, Photon, BullX, Parde, or Stalk.fun in one tap.
+                Then route to Jupiter, DexScreener, Axiom, Photon, BullX, Parde, Solpump, or Stalk.fun in one tap.
               </div>
             </div>
             <div id="errorBox" class="error-box"></div>
@@ -673,11 +672,15 @@
   </div>
 
   <script>
-    /* ====== YOUR AFFILIATE / REF LINKS – EDIT THESE ONLY ====== */
-    const JUP_REF = "YOUR_JUPITER_REF_ADDRESS_HERE"; // e.g. your wallet/ref for Jupiter
-    const PARDE_URL = "https://parde.trade/?ref=YOUR_PARDE_REF_HERE";
-    const STALK_URL = "https://stalk.fun/?ref=YOUR_STALKFUN_REF_HERE";
-    /* ========================================================== */
+    /* ====== YOUR AFFILIATE / REF LINKS (from your message) ====== */
+    const JUP_REF   = "3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG";
+    const AXIOM_URL = "https://axiom.trade/@dudexyz";
+    const BULLX_URL = "https://t.me/BullxBetaBot?start=access_N3OJF4TE16J";
+    const PARDE_URL = "https://trade.padre.gg/rk/dudexyz";
+    const PHOTON_URL = "https://photon-sol.tinyastro.io/@xyzthegod";
+    const STALK_URL  = "https://stalk.fun/?r=ZATEZOJI";
+    const SOLPUMP_URL = "https://solpump.io/a/DUDEXYZ";
+    /* ============================================================ */
 
     const API_BASE = "/api/check";
 
@@ -689,7 +692,6 @@
     const errorBox = document.getElementById("errorBox");
     const recentRow = document.getElementById("recentRow");
 
-    // local history
     const RECENT_KEY = "glassbox_recent_mints";
     const MAX_RECENT = 5;
 
@@ -889,8 +891,6 @@
       const symbol = tokenMeta?.symbol || "";
       const logo = tokenMeta?.logoURI || null;
 
-      const priceUsd = tokenMetrics?.priceUsd;
-      const liqUsd = tokenMetrics?.liquidityUsd;
       const ageFmt = formatAge(tokenAge);
 
       const rawSupply = mintInfo?.supply;
@@ -929,6 +929,9 @@
       else if (riskLevel === "medium") riskLabel = "Medium risk";
       else if (riskLevel === "high") riskLabel = "High rug risk";
 
+      const scoreRaw = typeof riskSummary?.score === "number" ? riskSummary.score : null;
+      const score = scoreRaw != null ? Math.max(0, Math.min(100, scoreRaw)) : null;
+
       const ic = insiderClusters || {};
       const clusterRisk = ic.riskLevel || "low";
       const clusterNote =
@@ -947,15 +950,22 @@
           )} · ~${largestCluster.pctOfSupply.toFixed(1)}%`
         : "No strong cluster among sampled holders.";
 
+      const top10BarWidth =
+        top10Pct != null && !isNaN(top10Pct)
+          ? Math.max(0, Math.min(100, top10Pct))
+          : null;
+
       // Route URLs using your constants
-      const jupRefPart = JUP_REF ? `?ref=${encodeURIComponent(JUP_REF)}` : "";
-      const jupUrl = `https://jup.ag/swap/SOL-${encodeURIComponent(mint)}${jupRefPart}`;
+      const jupUrl = `https://jup.ag/swap/SOL-${encodeURIComponent(mint)}?ref=${encodeURIComponent(
+        JUP_REF
+      )}`;
       const dexsUrl = `https://dexscreener.com/solana/${mint}`;
-      const axiomUrl = `https://app.axiom.xyz/token/${mint}?network=solana`;
-      const photonUrl = `https://photon-sol.tinyastro.io/en/lp/${mint}`;
-      const bullxUrl = `https://bullx.io/terminal?chainId=1399811149&address=${mint}`;
+      const axiomUrl = AXIOM_URL;
+      const photonUrl = PHOTON_URL;
+      const bullxUrl = BULLX_URL;
       const pardeUrl = PARDE_URL;
       const stalkUrl = STALK_URL;
+      const solpumpUrl = SOLPUMP_URL;
 
       resultBox.innerHTML = `
         <div class="result-top">
@@ -983,6 +993,22 @@
         ${
           riskSummary?.blurb
             ? `<div class="token-subtitle" style="margin-top:2px;">${riskSummary.blurb}</div>`
+            : ""
+        }
+
+        ${
+          score !== null
+            ? `
+        <div style="margin:6px 0 4px 0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:2px;">
+            <span>GlassBox scam score (0–100)</span>
+            <span style="color:var(--accent);font-weight:600;">${score.toFixed(0)}/100</span>
+          </div>
+          <div style="height:6px;border-radius:999px;background:#020617;border:1px solid rgba(31,41,55,0.9);overflow:hidden;">
+            <div style="height:100%;width:${score}%;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444);"></div>
+          </div>
+        </div>
+        `
             : ""
         }
 
@@ -1093,6 +1119,17 @@
               <span class="info-label">Funding clusters</span>
               <span class="${clusterChipClass}">${clusterHeadline}</span>
             </div>
+            ${
+              top10BarWidth !== null
+                ? `
+            <div style="margin-top:4px;font-size:10px;color:var(--text-muted);">
+              ${top10Pct.toFixed(1)}% held by top 10 wallets (excl. LP)
+            </div>
+            <div style="margin-top:2px;height:4px;border-radius:999px;background:#020617;border:1px solid rgba(31,41,55,0.9);overflow:hidden;">
+              <div style="height:100%;width:${top10BarWidth}%;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444);"></div>
+            </div>`
+                : ""
+            }
             <div class="info-note">${clusterNote}</div>
           </div>
         </div>
@@ -1130,8 +1167,9 @@
           <a class="tool-pill" href="${axiomUrl}" target="_blank" rel="noopener noreferrer">🧠 Axiom</a>
           <a class="tool-pill" href="${photonUrl}" target="_blank" rel="noopener noreferrer">⚡ Photon</a>
           <a class="tool-pill" href="${bullxUrl}" target="_blank" rel="noopener noreferrer">🐂 BullX</a>
+          <a class="tool-pill" href="${pardeUrl}" target="_blank" rel="noopener noreferrer">⚙️ Padre</a>
+          <a class="tool-pill" href="${solpumpUrl}" target="_blank" rel="noopener noreferrer">💧 Solpump</a>
           <a class="tool-pill" href="${stalkUrl}" target="_blank" rel="noopener noreferrer">🕵️ Stalk.fun</a>
-          <a class="tool-pill" href="${pardeUrl}" target="_blank" rel="noopener noreferrer">⚙️ Parde</a>
         </div>
 
         <div class="bottom-row">
@@ -1213,7 +1251,6 @@
       }
     });
 
-    // click on recent pill = re-scan that mint
     if (recentRow) {
       recentRow.addEventListener("click", (e) => {
         const pill = e.target.closest(".risk-pill");
@@ -1225,7 +1262,6 @@
       });
     }
 
-    // load previous scans on page load
     loadRecentMints();
   </script>
 </body>
