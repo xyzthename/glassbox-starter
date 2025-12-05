@@ -53,15 +53,13 @@
     }
 
     @media (max-width: 900px) {
-      .inner {
-        grid-template-columns: minmax(0, 1fr);
-      }
+      .inner { grid-template-columns: minmax(0, 1fr); }
     }
 
     .left-col {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
     }
 
     .right-col {
@@ -89,9 +87,7 @@
       margin-top: 4px;
     }
 
-    .hero-title span {
-      color: var(--accent);
-    }
+    .hero-title span { color: var(--accent); }
 
     .hero-sub {
       font-size: 13px;
@@ -109,14 +105,17 @@
     .input-label-row {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       font-size: 11px;
       color: var(--muted);
-      margin-bottom: 4px;
+      margin-bottom: 6px;
+      gap: 8px;
     }
 
     .input-label {
       text-transform: uppercase;
       letter-spacing: 0.14em;
+      font-size: 10px;
     }
 
     .input-row {
@@ -186,6 +185,7 @@
       font-size: 11px;
     }
 
+    /* quick example pills (USDC etc) */
     .quick-pills {
       margin-top: 8px;
       display: flex;
@@ -208,10 +208,38 @@
       white-space: nowrap;
     }
 
-    .quick-pill.badge-green {
+    /* recent-scans row – based on old preset style */
+    .preset-row {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 11px;
+    }
+
+    .preset-pill {
+      border-radius: 999px;
+      padding: 4px 9px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      background: rgba(15, 23, 42, 0.96);
+      color: #e5e7ff;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .preset-pill.safe {
       border-color: rgba(34, 197, 94, 0.9);
-      color: var(--accent);
-      background: rgba(34, 197, 94, 0.18);
+      color: #bbf7d0;
+      background: rgba(21, 128, 61, 0.32);
+    }
+
+    .preset-pill.risky {
+      border-color: rgba(248, 113, 113, 0.9);
+      color: #fecaca;
+      background: rgba(127, 29, 29, 0.45);
     }
 
     .footer-note {
@@ -313,9 +341,7 @@
     }
 
     @media (max-width: 650px) {
-      .metrics-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
+      .metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
     .metric {
@@ -358,9 +384,7 @@
     }
 
     @media (max-width: 650px) {
-      .two-col {
-        grid-template-columns: minmax(0, 1fr);
-      }
+      .two-col { grid-template-columns: minmax(0, 1fr); }
     }
 
     .section-card {
@@ -549,38 +573,21 @@
                 <span id="scanBtnSpinner" style="display:none;">⏳</span>
               </button>
             </div>
+
             <div class="hint-row">
               <div class="hint-icon">🔒</div>
               <div>We never see or store your wallet or keys. Only mint + public on-chain data.</div>
             </div>
 
+            <!-- Quick example pill -->
             <div class="quick-pills">
               <button type="button" class="quick-pill" id="exampleUsdc">
                 🔍 Try USDC
               </button>
-
-              <a
-                class="quick-pill badge-green"
-                id="pardePill"
-                href="https://parde.trade/?ref=YOUR_PARDE_REF"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                ⚙️ Parde Terminal
-              </a>
-
-              <a
-                class="quick-pill badge-green"
-                id="stalkFunPill"
-                href="https://stalk.fun/?ref=YOUR_STALK_REF"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                🕵️ Stalk.fun Board
-              </a>
-
-              <!-- you can add more example pills if you want -->
             </div>
+
+            <!-- Recent scans (up to 5) -->
+            <div class="preset-row" id="recentRow"></div>
           </div>
 
           <div class="footer-note">
@@ -621,6 +628,10 @@
     const resultBox = document.getElementById("resultBox");
     const errorBox = document.getElementById("errorBox");
     const exampleUsdcBtn = document.getElementById("exampleUsdc");
+    const recentRow = document.getElementById("recentRow");
+
+    const RECENT_KEY = "glassbox_recent_mints";
+    const MAX_RECENT = 5;
 
     function setLoading(on) {
       if (on) {
@@ -729,6 +740,69 @@
       return "badge";
     }
 
+    function saveRecentMint(mint, symbol, riskLevel) {
+      try {
+        const raw = localStorage.getItem(RECENT_KEY);
+        let arr = [];
+        if (raw) {
+          arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) arr = [];
+        }
+        arr = arr.filter((item) => item.mint !== mint);
+        arr.unshift({
+          mint,
+          symbol: symbol || "",
+          risk: riskLevel || "unknown",
+        });
+        if (arr.length > MAX_RECENT) arr = arr.slice(0, MAX_RECENT);
+        localStorage.setItem(RECENT_KEY, JSON.stringify(arr));
+        renderRecentMints(arr);
+      } catch {
+        // ignore
+      }
+    }
+
+    function loadRecentMints() {
+      try {
+        const raw = localStorage.getItem(RECENT_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        renderRecentMints(arr);
+        return arr;
+      } catch {
+        return [];
+      }
+    }
+
+    function renderRecentMints(arr) {
+      if (!recentRow) return;
+      if (!arr || !arr.length) {
+        recentRow.innerHTML = "";
+        return;
+      }
+      recentRow.innerHTML = arr
+        .map((item) => {
+          let cls = "preset-pill";
+          if (item.risk === "high") cls += " risky";
+          else if (item.risk === "low") cls += " safe";
+          const label =
+            (item.symbol || "").toUpperCase() || shortAddr(item.mint);
+          let riskText =
+            item.risk === "high"
+              ? "Risky"
+              : item.risk === "medium"
+              ? "Watch"
+              : item.risk === "low"
+              ? "Safe"
+              : "Scanned";
+          return `<button type="button" class="${cls}" data-mint="${item.mint}">
+                    ${label} · ${riskText}
+                  </button>`;
+        })
+        .join("");
+    }
+
     function render(data, mint) {
       const {
         tokenMeta,
@@ -778,7 +852,6 @@
       else if (riskLevel === "medium") riskLabel = "Medium risk";
       else if (riskLevel === "high") riskLabel = "High rug risk";
 
-      // insider clusters
       const ic = insiderClusters || {};
       const clusterRisk = ic.riskLevel || "low";
       const clusterNote = ic.note || "No strong funding-based insider clusters found.";
@@ -793,7 +866,6 @@
           )} holding ~${largestCluster.pctOfSupply.toFixed(1)}%`
         : "No strong cluster detected among sampled holders.";
 
-      // liquidity lock placeholder
       let liqLockLabel = "Unknown";
       let liqLockCls = "badge badge-bad";
       const lockPercent = liquidityTruth?.lockPercent;
@@ -824,6 +896,8 @@
       const axiomUrl = `https://app.axiom.xyz/token/${mint}?network=solana`;
       const photonUrl = `https://photon-sol.tinyastro.io/en/lp/${mint}`;
       const bullxUrl = `https://bullx.io/terminal?chainId=1399811149&address=${mint}`;
+      const pardeUrl = "https://parde.trade/?ref=YOUR_PARDE_REF";
+      const stalkUrl = "https://stalk.fun/?ref=YOUR_STALK_REF";
 
       resultBox.innerHTML = `
         <div class="result-header">
@@ -981,6 +1055,8 @@
           <a class="tool-btn" href="${axiomUrl}" target="_blank" rel="noopener noreferrer">🧠 Axiom</a>
           <a class="tool-btn" href="${photonUrl}" target="_blank" rel="noopener noreferrer">⚡ Photon</a>
           <a class="tool-btn" href="${bullxUrl}" target="_blank" rel="noopener noreferrer">🐂 BullX</a>
+          <a class="tool-btn" href="${stalkUrl}" target="_blank" rel="noopener noreferrer">🕵️ Stalk.fun</a>
+          <a class="tool-btn" href="${pardeUrl}" target="_blank" rel="noopener noreferrer">⚙️ Parde</a>
         </div>
 
         <div class="bottom-row">
@@ -1022,6 +1098,9 @@
           } catch {}
         };
       }
+
+      // save to recent-history row
+      saveRecentMint(mint, symbol, riskLevel);
     }
 
     async function handleScan() {
@@ -1065,6 +1144,20 @@
         mintInput.focus();
       });
     }
+
+    if (recentRow) {
+      recentRow.addEventListener("click", (e) => {
+        const btn = e.target.closest(".preset-pill");
+        if (!btn) return;
+        const mint = btn.dataset.mint;
+        if (!mint) return;
+        mintInput.value = mint;
+        handleScan();
+      });
+    }
+
+    // load previous scans on page load
+    loadRecentMints();
   </script>
 </body>
 </html>
