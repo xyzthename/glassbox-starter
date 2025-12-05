@@ -1,14 +1,13 @@
-// api/check.js
-// GlassBox backend
-// - Helius RPC for mint + holders + basic funding history
-// - DexScreener for price / liquidity / age / 24h DEX fees
-// NOTE: Safe to commit to GitHub as long as HELIUS_API_KEY
-//       lives only in environment variables (Vercel / .env).
+// pages/api/check.js
+// GlassBox backend:
+// - Helius RPC for mint, holders, basic funding history
+// - DexScreener for price / liquidity / age / 24h fees
+// HELIUS_API_KEY must be in env (Vercel / .env.local). DO NOT hardcode.
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-// Known Solana stablecoins (whitelist)
+// Known Solana stablecoins
 const STABLECOIN_WHITELIST = {
   // USDC (Solana)
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1": {
@@ -20,12 +19,12 @@ const STABLECOIN_WHITELIST = {
     symbol: "USDT",
     name: "Tether USD (USDT)",
   },
-  // PYUSD (Solana)
+  // PYUSD
   "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": {
     symbol: "PYUSD",
     name: "PayPal USD (PYUSD)",
   },
-  // USD1 (Solana)
+  // USD1
   "USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB": {
     symbol: "USD1",
     name: "World Liberty Financial USD (USD1)",
@@ -58,11 +57,9 @@ async function heliusRpc(method, params) {
   return json.result;
 }
 
-// ---------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------
-
-// Decode mint account data (supply, decimals, authorities)
+// -----------------------------------------------------
+// Mint parsing
+// -----------------------------------------------------
 function parseMintAccount(base64Data) {
   const raw = Buffer.from(base64Data, "base64");
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
@@ -72,22 +69,22 @@ function parseMintAccount(base64Data) {
   // u32: mintAuthorityOption
   const mintAuthOpt = view.getUint32(offset, true);
   const hasMintAuthority = mintAuthOpt !== 0;
-  offset += 4 + 32; // skip option + pubkey bytes
+  offset += 4 + 32; // option + pubkey
 
-  // u64: supply (little endian)
+  // u64 supply
   const low = view.getUint32(offset, true);
   const high = view.getUint32(offset + 4, true);
   const supplyBig = BigInt(low) + (BigInt(high) << 32n);
   offset += 8;
 
-  // u8: decimals
+  // u8 decimals
   const decimals = raw[offset];
   offset += 1;
 
-  // u8: isInitialized (unused)
+  // u8 isInitialized
   offset += 1;
 
-  // u32: freezeAuthorityOption
+  // u32 freezeAuthorityOption
   const freezeOpt = view.getUint32(offset, true);
   const hasFreezeAuthority = freezeOpt !== 0;
 
@@ -104,12 +101,14 @@ function shortAddr(addr) {
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
-// Safe wrappers so big tokens (USDC, USDT, etc.) don’t blow us up
+// -----------------------------------------------------
+// Safe helpers
+// -----------------------------------------------------
 async function safeGetAsset(mint) {
   try {
     return await heliusRpc("getAsset", [mint]);
   } catch (e) {
-    console.error("safeGetAsset error for mint", mint, e?.message);
+    console.error("safeGetAsset error", mint, e?.message);
     return null;
   }
 }
@@ -118,13 +117,12 @@ async function safeGetLargestAccounts(mint) {
   try {
     return await heliusRpc("getTokenLargestAccounts", [mint]);
   } catch (e) {
-    console.error("safeGetLargestAccounts error for mint", mint, e?.message);
+    console.error("safeGetLargestAccounts error", mint, e?.message);
     return { value: [] };
   }
 }
 
-// NEW: more honest holder count – uses getTokenAccountsByMint,
-// returns null on failure instead of faking a value.
+// ✅ holders count using getTokenAccountsByMint
 async function safeCountTokenHolders(mint) {
   try {
     const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -134,6 +132,7 @@ async function safeCountTokenHolders(mint) {
       {
         programId: TOKEN_PROGRAM_ID,
         encoding: "jsonParsed",
+        commitment: "processed",
       },
     ]);
 
@@ -144,38 +143,31 @@ async function safeCountTokenHolders(mint) {
       const parsed = acc.account?.data?.parsed;
       const info = parsed?.info;
       if (!info) continue;
-
       const owner = info.owner;
       const uiAmount = info.tokenAmount?.uiAmount ?? 0;
-
       if (!owner || !uiAmount || uiAmount <= 0) continue;
       owners.add(owner);
     }
 
-    if (owners.size === 0) return null;
-    return owners.size;
+    return owners.size || null;
   } catch (e) {
-    console.error("safeCountTokenHolders error for mint", mint, e?.message);
+    console.error("safeCountTokenHolders error", mint, e?.message);
+    // return null when it fails -> frontend shows N/A instead of lying
     return null;
   }
 }
 
-/**
- * DexScreener helper
- */
+// DexScreener stats
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
   const url = `https://api.dexscreener.com/token-pairs/v1/${chainId}/${mint}`;
-
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
   }
-
   const json = await res.json();
   const rawPairs = Array.isArray(json) ? json : [];
   const mintLower = mint.toLowerCase();
-
   const pairs = rawPairs.filter((p) => p && p.chainId === chainId);
 
   if (!pairs.length) {
@@ -196,7 +188,6 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   for (const p of pairs) {
     const baseAddr = p.baseToken?.address;
     const quoteAddr = p.quoteToken?.address;
-
     const rawPriceUsd =
       p.priceUsd != null ? Number(p.priceUsd) : null;
     const priceNative =
@@ -230,12 +221,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
 
     if (liqUsd > bestLiquidity) {
       bestLiquidity = liqUsd;
-      best = {
-        pair: p,
-        priceUsd: myPriceUsd,
-        liquidityUsd: liqUsd,
-        poolMintReserve,
-      };
+      best = { pair: p, priceUsd: myPriceUsd, liquidityUsd: liqUsd, poolMintReserve };
     }
   }
 
@@ -262,9 +248,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
         ? Number(selectedPair.liquidity.usd)
         : null;
     priceUsd =
-      selectedPair.priceUsd != null
-        ? Number(selectedPair.priceUsd)
-        : null;
+      selectedPair.priceUsd != null ? Number(selectedPair.priceUsd) : null;
 
     const baseAddr = selectedPair.baseToken?.address;
     const quoteAddr = selectedPair.quoteToken?.address;
@@ -281,50 +265,40 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     }
   }
 
-  if (
-    selectedPair &&
-    selectedPair.volume &&
-    typeof selectedPair.volume === "object"
-  ) {
-    const v24 = selectedPair.volume.h24;
-    if (v24 != null) {
-      const n24 = Number(v24);
-      if (!Number.isNaN(n24)) {
-        volume24 = n24;
-      }
-    }
+  if (selectedPair?.volume?.h24 != null) {
+    const n = Number(selectedPair.volume.h24);
+    if (!Number.isNaN(n)) volume24 = n;
   }
 
-  if (selectedPair && selectedPair.txns && typeof selectedPair.txns === "object") {
-    const t24 = selectedPair.txns.h24;
-    if (t24) {
-      const buys = Number(t24.buys || 0);
-      const sells = Number(t24.sells || 0);
-      const total = buys + sells;
-      if (!Number.isNaN(total) && total > 0) {
-        txCount24 = total;
-      }
-    }
+  if (selectedPair?.txns?.h24) {
+    const buys = Number(selectedPair.txns.h24.buys || 0);
+    const sells = Number(selectedPair.txns.h24.sells || 0);
+    const total = buys + sells;
+    if (!Number.isNaN(total) && total > 0) txCount24 = total;
   }
 
   if (volume24 != null && !Number.isNaN(volume24)) {
     dexFeesUsd24h = volume24 * 0.003;
   }
 
-  if (selectedPair) {
-    pairCreatedAt = selectedPair.pairCreatedAt;
-  }
-
-  let ageDays = null;
-  if (pairCreatedAt != null) {
-    let createdMs = Number(pairCreatedAt);
+  if (selectedPair?.pairCreatedAt != null) {
+    let createdMs = Number(selectedPair.pairCreatedAt);
     if (!Number.isNaN(createdMs) && createdMs > 0) {
-      if (createdMs < 1e12) {
-        createdMs *= 1000;
-      }
+      if (createdMs < 1e12) createdMs *= 1000; // seconds → ms
       const now = Date.now();
       if (now > createdMs) {
-        ageDays = (now - createdMs) / (1000 * 60 * 60 * 24);
+        const diffMs = now - createdMs;
+        const days = diffMs / (1000 * 60 * 60 * 24);
+        pairCreatedAt = createdMs;
+        return {
+          priceUsd,
+          liquidityUsd,
+          ageDays: days,
+          dexFeesUsd24h,
+          poolMintReserve,
+          volume24Usd: volume24,
+          txCount24,
+        };
       }
     }
   }
@@ -332,7 +306,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   return {
     priceUsd,
     liquidityUsd,
-    ageDays,
+    ageDays: null,
     dexFeesUsd24h,
     poolMintReserve,
     volume24Usd: volume24,
@@ -344,7 +318,7 @@ async function fetchDexAndAgeStatsFallback(mint) {
   try {
     return await fetchDexAndAgeStatsFromDexScreener(mint);
   } catch (e) {
-    console.error("Dex/Age stats fallback error for mint", mint, e?.message);
+    console.error("Dex stats error", mint, e?.message);
     return {
       priceUsd: null,
       liquidityUsd: null,
@@ -357,11 +331,9 @@ async function fetchDexAndAgeStatsFallback(mint) {
   }
 }
 
-// ---------------------------------------------------------------------
-// NEW: Insider clustering helpers (v1, cheap + Helius-only)
-// ---------------------------------------------------------------------
-
-// Get a few recent signatures for address
+// -----------------------------------------------------
+// Insider clustering helpers
+// -----------------------------------------------------
 async function safeGetSignatures(address, limit = 5) {
   try {
     const res = await heliusRpc("getSignaturesForAddress", [
@@ -370,12 +342,11 @@ async function safeGetSignatures(address, limit = 5) {
     ]);
     return Array.isArray(res) ? res : [];
   } catch (e) {
-    console.error("safeGetSignatures error for", address, e?.message);
+    console.error("safeGetSignatures error", address, e?.message);
     return [];
   }
 }
 
-// Get parsed transaction for a given signature
 async function safeGetParsedTransaction(signature) {
   try {
     const res = await heliusRpc("getParsedTransaction", [
@@ -389,32 +360,21 @@ async function safeGetParsedTransaction(signature) {
   }
 }
 
-/**
- * For each holder address we try to infer "funding wallets" using:
- * - fee payer of recent transactions (cheap approximation)
- * - we only sample a very small number of txs to stay within free limits.
- *
- * Returns: Map<holderAddress, {funders:Set<string>}>
- */
+// Map<holder, {funders:Set<string>}>
 async function buildHolderFundersMap(holderAddresses) {
   const result = {};
-
-  // keep it small for now: at most 5 holders, 3 sigs each
-  const addresses = holderAddresses.slice(0, 5);
+  const addresses = holderAddresses.slice(0, 5); // keep it cheap
 
   await Promise.all(
     addresses.map(async (addr) => {
       const funders = new Set();
       const sigs = await safeGetSignatures(addr, 3);
       for (const s of sigs) {
-        if (!s || !s.signature) continue;
+        if (!s?.signature) continue;
         const tx = await safeGetParsedTransaction(s.signature);
-        if (!tx) continue;
         const feePayer =
-          tx.transaction?.message?.accountKeys?.[0]?.pubkey || null;
-        if (feePayer && feePayer !== addr) {
-          funders.add(feePayer);
-        }
+          tx?.transaction?.message?.accountKeys?.[0]?.pubkey || null;
+        if (feePayer && feePayer !== addr) funders.add(feePayer);
       }
       result[addr] = { funders };
     })
@@ -423,19 +383,13 @@ async function buildHolderFundersMap(holderAddresses) {
   return result;
 }
 
-/**
- * Build insider clusters based on shared funding wallets among top non-LP holders.
- * We treat each "funder" that appears for >= 2 holders as a cluster.
- */
 function buildInsiderClusters(nonLpHolders, holderFundersMap) {
-  // Map<funder, {holderAddresses:string[], pct:number}>
   const funderClusters = new Map();
 
   for (const h of nonLpHolders) {
     const addr = h.address;
-    const holderPct = h.pct || 0;
+    const pct = h.pct || 0;
     const funders = holderFundersMap[addr]?.funders || new Set();
-
     for (const f of funders) {
       if (!funderClusters.has(f)) {
         funderClusters.set(f, {
@@ -446,11 +400,10 @@ function buildInsiderClusters(nonLpHolders, holderFundersMap) {
       }
       const cluster = funderClusters.get(f);
       cluster.holderAddresses.push(addr);
-      cluster.pctOfSupply += holderPct;
+      cluster.pctOfSupply += pct;
     }
   }
 
-  // Only keep clusters with at least 2 distinct holders
   const clusters = Array.from(funderClusters.values()).filter(
     (c) => c.holderAddresses.length >= 2
   );
@@ -466,9 +419,7 @@ function buildInsiderClusters(nonLpHolders, holderFundersMap) {
     };
   }
 
-  // Sort by pct desc
   clusters.sort((a, b) => b.pctOfSupply - a.pctOfSupply);
-
   const largestCluster = clusters[0];
   const totalClusterPct = clusters.reduce(
     (sum, c) => sum + (c.pctOfSupply || 0),
@@ -509,10 +460,9 @@ function buildInsiderClusters(nonLpHolders, holderFundersMap) {
   };
 }
 
-// ---------------------------------------------------------------------
-// Handler
-// ---------------------------------------------------------------------
-
+// -----------------------------------------------------
+// API handler
+// -----------------------------------------------------
 export default async function handler(req, res) {
   try {
     if (req.method !== "GET") {
@@ -531,22 +481,13 @@ export default async function handler(req, res) {
         .json({ error: "HELIUS_API_KEY is not set in environment" });
     }
 
-    // 1) Mint account
     const accountInfoPromise = heliusRpc("getAccountInfo", [
       mint,
       { encoding: "base64" },
     ]);
-
-    // 2) Metadata
     const assetPromise = safeGetAsset(mint);
-
-    // 3) Largest accounts (holders, top 20)
     const largestPromise = safeGetLargestAccounts(mint);
-
-    // 4) Price / liquidity / age / 24h fees from DexScreener
     const dexStatsPromise = fetchDexAndAgeStatsFallback(mint);
-
-    // 5) Total unique holders
     const holdersCountPromise = safeCountTokenHolders(mint);
 
     const [accountInfo, asset, largest, dexStats, holdersCount] =
@@ -572,18 +513,12 @@ export default async function handler(req, res) {
     const mintAuthority = parsedMint.hasMintAuthority;
     const freezeAuthority = parsedMint.hasFreezeAuthority;
 
-    const mintInfo = {
-      supply: rawSupply,
-      decimals,
-    };
+    const mintInfo = { supply: rawSupply, decimals };
 
-    // -----------------------------------------------------------------
-    // Token metadata
-    // -----------------------------------------------------------------
+    // metadata
     let name = "Unknown Token";
     let symbol = "";
     let logoURI = null;
-
     try {
       if (asset?.content?.metadata) {
         name = asset.content.metadata.name || name;
@@ -598,13 +533,10 @@ export default async function handler(req, res) {
 
     const tokenMeta = { name, symbol, logoURI };
 
-    // -----------------------------------------------------------------
-    // Holder summary (LP detection + top 10 including/excluding LP)
-    // -----------------------------------------------------------------
+    // holders & LP
     const largestAccounts = largest?.value || [];
     const supplyBN =
       rawSupply && rawSupply !== "0" ? BigInt(rawSupply) : 0n;
-
     const poolMintReserve =
       dexStats.poolMintReserve != null
         ? Number(dexStats.poolMintReserve)
@@ -632,7 +564,6 @@ export default async function handler(req, res) {
         uiAmount,
       };
 
-      // LP detection via pool reserve
       if (
         poolMintReserve != null &&
         !Number.isNaN(poolMintReserve) &&
@@ -643,7 +574,6 @@ export default async function handler(req, res) {
       ) {
         const diff = Math.abs(uiAmount - poolMintReserve);
         const relDiff = diff / poolMintReserve;
-
         if (relDiff < 0.2 && relDiff < bestReserveRelDiff) {
           bestReserveRelDiff = relDiff;
           lpHolder = holder;
@@ -660,20 +590,16 @@ export default async function handler(req, res) {
     }
 
     const top10InclLP = allHolders.slice(0, 10);
-
     const nonLpHolders = lpHolder
       ? allHolders.filter((h) => h.address !== lpHolder.address)
       : allHolders;
-
     const top10ExclLP = nonLpHolders.slice(0, 10);
 
     let top10Pct = null;
     let top10PctExcludingLP = null;
-
     if (top10InclLP.length && rawSupply && rawSupply !== "0") {
       top10Pct = top10InclLP.reduce((sum, h) => sum + (h.pct || 0), 0);
     }
-
     if (top10ExclLP.length && rawSupply && rawSupply !== "0") {
       top10PctExcludingLP = top10ExclLP.reduce(
         (sum, h) => sum + (h.pct || 0),
@@ -681,9 +607,7 @@ export default async function handler(req, res) {
       );
     }
 
-    // ---------------------------------------------------------------
-    // Insider / whale threshold summary (non-LP)
-    // ---------------------------------------------------------------
+    // insider summary (non-LP)
     const INSIDER_THRESHOLD_PCT = 1;
     const WHALE_THRESHOLD_PCT = 5;
 
@@ -698,7 +622,6 @@ export default async function handler(req, res) {
       (sum, h) => sum + (h.pct || 0),
       0
     );
-
     const largestInsider = insidersAll.length ? insidersAll[0] : null;
 
     let insiderRiskLevel = "low";
@@ -729,22 +652,16 @@ export default async function handler(req, res) {
       note: insiderNote,
     };
 
-    // NOTE: we do NOT fake holders count anymore.
-    const effectiveHoldersCount =
-      holdersCount != null ? holdersCount : null;
-
     const holderSummary = {
       top10Pct,
       topHolders: top10InclLP,
       top10PctExcludingLP,
       topHoldersExcludingLP: top10ExclLP,
       lpHolder,
-      holdersCount: effectiveHoldersCount,
+      holdersCount: holdersCount ?? null, // null => frontend shows N/A
     };
 
-    // -----------------------------------------------------------------
-    // NEW: Insider Clustering v1 (funding-based)
-    // -----------------------------------------------------------------
+    // insider clustering
     const nonLpAddresses = nonLpHolders.map((h) => h.address);
     const holderFundersMap = await buildHolderFundersMap(nonLpAddresses);
     const insiderClusters = buildInsiderClusters(
@@ -752,27 +669,18 @@ export default async function handler(req, res) {
       holderFundersMap
     );
 
-    // -----------------------------------------------------------------
-    // Origin hint
-    // -----------------------------------------------------------------
+    // origin hint
     let originLabel = "Unknown protocol / origin";
     let originDetail = "";
     const lowerMint = mint.toLowerCase();
-
     if (lowerMint.endsWith("pump")) {
       originLabel = "Likely Pump.fun mint";
       originDetail =
         "Mint resembles Pump.fun pattern. Always double-check creator + socials.";
     }
+    const originHint = { label: originLabel, detail: originDetail };
 
-    const originHint = {
-      label: originLabel,
-      detail: originDetail,
-    };
-
-    // -----------------------------------------------------------------
-    // Risk model (uses TOP 10 EXCLUDING LP)
-    // -----------------------------------------------------------------
+    // risk summary (uses non-LP top10)
     let level = "medium";
     let blurb = "";
     let score = 50;
@@ -780,7 +688,7 @@ export default async function handler(req, res) {
     if (
       !mintAuthority &&
       !freezeAuthority &&
-      top10PctExcludingLP !== null &&
+      top10PctExcludingLP != null &&
       top10PctExcludingLP <= 25
     ) {
       level = "low";
@@ -789,7 +697,7 @@ export default async function handler(req, res) {
       score = 90;
     } else if (
       !mintAuthority &&
-      (top10PctExcludingLP === null || top10PctExcludingLP <= 60)
+      (top10PctExcludingLP == null || top10PctExcludingLP <= 60)
     ) {
       level = "medium";
       blurb =
@@ -804,9 +712,6 @@ export default async function handler(req, res) {
 
     const riskSummary = { level, blurb, score };
 
-    // -----------------------------------------------------------------
-    // Dex metrics + token age
-    // -----------------------------------------------------------------
     const tokenMetrics = {
       priceUsd: dexStats.priceUsd,
       liquidityUsd: dexStats.liquidityUsd,
@@ -818,9 +723,7 @@ export default async function handler(req, res) {
         ? { ageDays: dexStats.ageDays }
         : { ageDays: null };
 
-    // -----------------------------------------------------------------
-    // Liquidity truth index (fake-liq suspicion)
-    // -----------------------------------------------------------------
+    // liquidity truth (fake-liq sniff)
     const liqUsd = dexStats.liquidityUsd;
     const vol24 = dexStats.volume24Usd ?? null;
     const txCount24 = dexStats.txCount24 ?? null;
@@ -872,14 +775,11 @@ export default async function handler(req, res) {
       txCount24,
       tradeToLiquidity,
       avgTradeUsd,
-      lockPercent: null, // still unknown for now (we'll build our own LP lock engine later)
+      lockPercent: null, // we are NOT guessing; stay honest until we build LP lock engine
     };
 
-    // -----------------------------------------------------------------
-    // Stablecoin overrides
-    // -----------------------------------------------------------------
+    // stablecoin override
     const stableConfig = STABLECOIN_WHITELIST[mint];
-
     if (stableConfig) {
       if (!tokenMeta.symbol) tokenMeta.symbol = stableConfig.symbol;
       if (!tokenMeta.name || tokenMeta.name === "Unknown Token") {
@@ -896,12 +796,9 @@ export default async function handler(req, res) {
       riskSummary.blurb =
         "This is a whitelisted centralized stablecoin on Solana. " +
         "Issuer risk and smart contract risk still exist, but 'rug pull' style mint tricks " +
-        "are not the main concern. Distribution and freeze authority may look scary but are expected.";
+        "are not the main concern.";
     }
 
-    // -----------------------------------------------------------------
-    // Final payload
-    // -----------------------------------------------------------------
     return res.status(200).json({
       tokenMeta,
       mintInfo,
@@ -909,7 +806,7 @@ export default async function handler(req, res) {
       mintAuthority,
       holderSummary,
       insiderSummary,
-      insiderClusters, // NEW (frontend ignores for now)
+      insiderClusters,
       originHint,
       riskSummary,
       tokenMetrics,
