@@ -1,4 +1,3 @@
-
 // pages/api/check.js
 // GlassBox backend – v2
 // - Helius RPC for mint + holders
