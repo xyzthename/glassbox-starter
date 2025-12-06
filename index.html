@@ -42,18 +42,6 @@
       max-width: 1200px;
       margin: auto;
     }
-    .glass-cracks-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("/glass-cracks.png");
-  background-size: cover;
-  background-position: center;
-  opacity: 0.22;
-  mix-blend-mode: screen;
-  z-index: 0;
-}
-
 
     .frame {
       border-radius: 24px;
@@ -129,44 +117,6 @@
       color: var(--text-muted);
       max-width: 380px;
     }
-    .hero-logo-wrapper {
-    margin-top: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    }
-
-    .hero-logo {
-    max-width: 160px;
-    height: auto;
-    opacity: 0.9;
-    filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.3));
-    }
-
-    body {
-  position: relative;
-  background: radial-gradient(circle at top, #061021 0%, #020308 55%, #000 100%);
-  color: #f9fafb;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Inter", sans-serif;
-}
-
-.glass-cracks-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("/glass-cracks.png");
-  background-size: cover;
-  background-position: center;
-  opacity: 0.22;
-  mix-blend-mode: screen;
-  z-index: 0;
-}
-
-.shell-root { /* or whatever your main wrapper class is */
-  position: relative;
-  z-index: 1; /* keep app above the cracks */
-}
 
     .mint-card {
       margin-top: 10px;
@@ -668,7 +618,6 @@
   </style>
 </head>
 <body>
-<div class="glass-cracks-overlay"></div>
   <div class="app">
     <div class="frame">
       <div class="inner">
@@ -720,9 +669,6 @@
             <div class="footer-note">
               Built for degen safety by
               <a href="https://x.com/Glassboxscans" target="_blank" rel="noopener noreferrer">@GlassBox</a>
-            </div>
-            <div class="hero-logo-wrapper">
-              <img src="/glassbox-logo.png" alt="GlassBox logo" class="hero-logo" />
             </div>
           </div>
         </div>
@@ -831,41 +777,30 @@
     }
 
     function formatAge(tokenAge) {
-  if (!tokenAge || tokenAge.days == null) return { main: "N/A", sub: "" };
-
-  const days = tokenAge.days;
-  const totalMinutes = days * 24 * 60;
-
-  // < 1 hour → minutes
-  if (totalMinutes < 60) {
-    const mins = Math.max(1, Math.floor(totalMinutes));
-    return { main: `${mins}m`, sub: "" };
-  }
-
-  const totalHours = days * 24;
-
-  // < 1 day → hours
-  if (totalHours < 24) {
-    const hrs = Math.floor(totalHours);
-    return { main: `${hrs}h`, sub: "" };
-  }
-
-  // < 2 weeks → days
-  if (days < 14) {
-    const d = Math.floor(days);
-    return { main: `${d}d`, sub: "" };
-  }
-
-  // < 1 year → months + days
-  if (days < 365) {
-    const months = (days / 30).toFixed(1);
-    return { main: `${months}m`, sub: `≈ ${Math.floor(days)} days` };
-  }
-
-  // ≥ 1 year → years + days
-  const years = (days / 365).toFixed(1);
-  return { main: `${years}y`, sub: `≈ ${Math.floor(days)} days` };
-}
+      const days = tokenAge?.ageDays;
+      if (days == null || isNaN(days)) {
+        return { main: "—", sub: "" };
+      }
+      const totalMinutes = Math.floor(days * 24 * 60);
+      if (totalMinutes < 60) {
+        const mins = Math.max(1, totalMinutes);
+        return { main: mins + "m", sub: "since mint" };
+      }
+      const totalHours = Math.floor(days * 24);
+      if (totalHours < 24) {
+        return { main: totalHours + "h", sub: "since mint" };
+      }
+      if (days < 30) {
+        const d = Math.floor(days);
+        return { main: d + "d", sub: "since mint" };
+      }
+      if (days < 365) {
+        const months = (days / 30).toFixed(1);
+        return { main: months + "m", sub: "≈ " + Math.floor(days) + " days" };
+      }
+      const years = (days / 365).toFixed(1);
+      return { main: years + "y", sub: "≈ " + Math.floor(days) + " days" };
+    }
 
     function renderError(msg) {
       errorBox.style.display = "block";
