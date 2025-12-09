@@ -270,6 +270,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     txCount24,
     dexFeesUsd24h,
     socials,
+    dexId: selected.dexId ? String(selected.dexId).toLowerCase() : null, // <--
   };
 }
 
@@ -287,8 +288,190 @@ async function fetchDexStatsSafe(mint) {
       txCount24: null,
       dexFeesUsd24h: null,
       socials: null,
+      dexId: null,
     };
   }
+}
+
+// --- Origin / protocol detection helper -------------------------------
+
+function detectOrigin({ mint, name, symbol, desc, dexId }) {
+  const lowerName = (name || "").toLowerCase();
+  const lowerSym = (symbol || "").toLowerCase();
+  const lowerDesc = (desc || "").toLowerCase();
+  const dex = (dexId || "").toLowerCase();
+
+  let key = "unknown";
+  let label = "Unknown protocol / origin";
+  let detail =
+    "Origin could not be confidently determined from mint pattern, metadata, or pool.";
+
+  // Tiny helper: does any of the words appear in a string?
+  const hasAny = (str, words) =>
+    words.some((w) => w && str.includes(w.toLowerCase()));
+
+  // 1) Pump.fun style
+  if (
+    hasAny(lowerDesc, ["pump.fun"]) ||
+    hasAny(lowerName, [" pump", "pump "]) ||
+    hasAny(lowerSym, ["pump"]) ||
+    dex === "pump"
+  ) {
+    key = "pump";
+    label = "Pump.fun";
+    detail =
+      "Token likely minted via Pump.fun or traded primarily on Pump.fun pools. Pump.fun often locks LP, but always verify LP lock and insiders.";
+    return { key, label, detail };
+  }
+
+  // 2) Bags
+  if (
+    hasAny(lowerDesc, ["bags.fun"]) ||
+    hasAny(lowerName, ["bags "]) ||
+    hasAny(lowerSym, ["bags"])
+  ) {
+    key = "bags";
+    label = "Bags";
+    detail =
+      "Token metadata resembles Bags-style launches. Holder and LP distribution still need to be checked carefully.";
+    return { key, label, detail };
+  }
+
+  // 3) Daos.fun
+  if (hasAny(lowerDesc, ["daos.fun"]) || hasAny(lowerName, ["daos"])) {
+    key = "daosfun";
+    label = "Daos.fun";
+    detail =
+      "Likely launched via Daos.fun. Governance / DAO features may apply, but rug risk still depends on insiders and LP.";
+    return { key, label, detail };
+  }
+
+  // 4) Boop
+  if (hasAny(lowerName, ["boop"]) || hasAny(lowerSym, ["boop"])) {
+    key = "boop";
+    label = "Boop";
+    detail =
+      "Name / symbol suggests a Boop-style launch. Treat like any other meme launch and check insiders + LP.";
+    return { key, label, detail };
+  }
+
+  // 5) Believe / Mayhem / Moonshot / Candle / Heaven / Sugar / Moonit etc.
+  if (hasAny(lowerName, ["mayhem"])) {
+    key = "mayhem";
+    label = "Mayhem";
+    detail =
+      "Token name matches Mayhem-style launches. Risk depends heavily on insiders and LP behaviour.";
+    return { key, label, detail };
+  }
+
+  if (hasAny(lowerName, ["moonshot"])) {
+    key = "moonshot";
+    label = "Moonshot";
+    detail =
+      "Name suggests a Moonshot launch. Watch token age and insider activity closely.";
+    return { key, label, detail };
+  }
+
+  if (hasAny(lowerName, ["candle"])) {
+    key = "candle";
+    label = "Candle";
+    detail =
+      "Token name suggests a Candle-style launch. Check LP lock and holder distribution.";
+    return { key, label, detail };
+  }
+
+  if (hasAny(lowerName, ["heaven"])) {
+    key = "heaven";
+    label = "Heaven";
+    detail =
+      "Heaven-style branding detected from metadata. Still a degen launch; treat risk as normal for memes.";
+    return { key, label, detail };
+  }
+
+  if (hasAny(lowerName, ["sugar"])) {
+    key = "sugar";
+    label = "Sugar";
+    detail =
+      "Name matches Sugar-style launches. LP and insider distribution remain the main safety signals.";
+    return { key, label, detail };
+  }
+
+  if (hasAny(lowerName, ["moonit", "moont"])) {
+    key = "moonit";
+    label = "Moonit";
+    detail =
+      "Looks like a Moonit-style token. Small-cap degen launches require careful attention to holders and LP safety.";
+    return { key, label, detail };
+  }
+
+  // 6) Launch platforms / studios (Jupiter Studio, LaunchLab, Wavebreak)
+  if (hasAny(lowerDesc, ["jupiter studio"]) || hasAny(lowerName, ["jupiter studio"])) {
+    key = "jupiter-studio";
+    label = "Jupiter Studio";
+    detail =
+      "Likely created via Jupiter Studio or associated tools. Origin is more structured, but rug risk still depends on LP and insiders.";
+    return { key, label, detail };
+  }
+
+  if (hasAny(lowerDesc, ["launchlab"]) || hasAny(lowerName, ["launchlab"])) {
+    key = "launchlab";
+    label = "LaunchLab";
+    detail =
+      "Likely launched via LaunchLab. Fair-launch style does not remove rug risk from insiders or LP.";
+    return { key, label, detail };
+  }
+
+  if (hasAny(lowerDesc, ["wavebreak"]) || hasAny(lowerName, ["wavebreak"])) {
+    key = "wavebreak";
+    label = "Wavebreak";
+    detail =
+      "Branding suggests a Wavebreak-related token. As always, verify LP lock and insider holdings.";
+    return { key, label, detail };
+  }
+
+  // 7) AMM / DEX level (Raydium, Orca, Meteora, Pump AMM, Bonk)
+  if (dex === "raydium") {
+    key = "raydium";
+    label = "Raydium AMM";
+    detail =
+      "Primary liquidity pool is on Raydium. LP safety depends on lock / burn status and who holds the LP tokens.";
+    return { key, label, detail };
+  }
+
+  if (dex === "orca") {
+    key = "orca";
+    label = "Orca AMM";
+    detail =
+      "Primary liquidity pool is on Orca. Check LP lock and holder concentration for rug risk.";
+    return { key, label, detail };
+  }
+
+  if (dex === "meteora") {
+    key = "meteora";
+    label = "Meteora AMM";
+    detail =
+      "Primary liquidity pool is on Meteora. Dynamic pools can be capital-efficient but LP unlocks can still rug.";
+    return { key, label, detail };
+  }
+
+  if (dex === "pump") {
+    key = "pump-amm";
+    label = "Pump AMM";
+    detail =
+      "Token trades mainly via Pump AMM liquidity. Verify LP lock / burn and top-holder distribution.";
+    return { key, label, detail };
+  }
+
+  if (hasAny(lowerName, ["bonk"]) || hasAny(lowerDesc, ["bonkbot"])) {
+    key = "bonk";
+    label = "Bonk ecosystem";
+    detail =
+      "Token appears related to Bonk tooling or branding. Do not assume safety from branding alone.";
+    return { key, label, detail };
+  }
+
+  // If nothing matched, we keep the default "unknown"
+  return { key, label, detail };
 }
 
 // --- API handler -------------------------------------------------------
@@ -523,25 +706,22 @@ export default async function handler(req, res) {
         : null,
     };
 
-    // --- Origin hint ---------------------------------------------------
+        // --- Origin hint ---------------------------------------------------
 
-    let originLabel = "Unknown protocol / origin";
-    let originDetail = "";
-    const lowerName = name.toLowerCase();
-    const lowerSym = (symbol || "").toLowerCase();
-    const desc = (asset?.content?.metadata?.description || "").toLowerCase();
+    const rawDesc = asset?.content?.metadata?.description || "";
+    const originMeta = detectOrigin({
+      mint,
+      name,
+      symbol,
+      desc: rawDesc,
+      dexId: dexStats.dexId,
+    });
 
-    if (
-      lowerName.includes("pump") ||
-      lowerSym.includes("pump") ||
-      desc.includes("pump.fun")
-    ) {
-      originLabel = "Likely Pump.fun mint";
-      originDetail =
-        "Mint resembles Pump.fun pattern. Pump.fun usually locks LP, but always double-check.";
-    }
-
-    const originHint = { label: originLabel, detail: originDetail };
+    const originHint = {
+      label: originMeta.label,
+      detail: originMeta.detail,
+      key: originMeta.key,
+    };
 
        // --- Dex metrics + age + liquidity truth --------------------------
 
