@@ -1,4 +1,4 @@
-// api/check.js
+// pages/api/check.js
 // GlassBox backend – v2
 // - Helius RPC for mint + holders
 // - DexScreener for price / liquidity / age / volume / tx count / socials
@@ -11,7 +11,7 @@ const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 // --- Stablecoins we treat specially -----------------------------------
 
 const STABLECOIN_WHITELIST = {
-  // USDC
+  // USDC (your version with trailing v)
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
     symbol: "USDC",
     name: "USD Coin (USDC)",
@@ -46,8 +46,8 @@ function parseMintAccount(base64Data) {
 
   const supply = buf.readBigUInt64LE(36);
   const decimals = buf[44];
-  const mintAuthOpt = buf.readUInt32LE(0);   // 0 = none
-  const freezeAuthOpt = buf.readUInt32LE(48); // 0 = none
+  const mintAuthOpt = buf.readUInt32LE(0);
+  const freezeAuthOpt = buf.readUInt32LE(48);
 
   return {
     supply: supply.toString(),
@@ -65,6 +65,7 @@ function shortAddr(a) {
 // Count token accounts – but don’t crash API if it fails
 async function safeCountTokenHolders(mint) {
   try {
+    // Simple config: just ask for all token accounts for this mint
     const result = await callRpc("getTokenAccountsByMint", [
       mint,
       { commitment: "confirmed" },
@@ -442,7 +443,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // Moonit / Moont
+  // Moonit
   if (
     lowerMint.endsWith("moonit") ||
     lowerMint.endsWith("moont") ||
@@ -482,7 +483,10 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
   }
 
   // Wavebreak
-  if (hasAny(lowerDesc, ["wavebreak"]) || hasAny(lowerName, ["wavebreak"])) {
+  if (
+    hasAny(lowerDesc, ["wavebreak"]) ||
+    hasAny(lowerName, ["wavebreak"])
+  ) {
     key = "wavebreak";
     label = "Wavebreak";
     detail =
