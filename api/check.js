@@ -67,13 +67,19 @@ async function safeCountTokenHolders(mint) {
   try {
     const result = await callRpc("getTokenAccountsByMint", [
       mint,
-      { encoding: "jsonParsed", commitment: "confirmed" },
+      {
+        // we only care about how many accounts exist, not their data
+        encoding: "jsonParsed",
+        commitment: "confirmed",
+        dataSlice: { offset: 0, length: 0 },
+      },
     ]);
+
     if (!result || !Array.isArray(result.value)) return null;
     return result.value.length;
   } catch (e) {
     console.error("safeCountTokenHolders error:", e?.message);
-    return null; // front-end should show “RPC limit / index missing”
+    return null;
   }
 }
 
@@ -451,14 +457,22 @@ export default async function handler(req, res) {
       0
     );
 
-    const holderSummary = {
-      top10Pct: pctTop10InclLP,
-      topHolders: top10InclLP,
-      top10PctExcludingLP: pctTop10ExclLP,
-      topHoldersExcludingLP: top10ExclLP,
-      lpHolder,
-      holdersCount: holdersCount, // might be null if RPC capped – front-end should show “RPC limit / index missing”
-    };
+   // If RPC holder count failed, fall back to “at least number of known holders”
+let finalHoldersCount = holdersCount;
+if (finalHoldersCount == null) {
+  // allHolders comes from getTokenLargestAccounts (usually up to 20)
+  // This is a lower bound, but better than N/A on the UI.
+  finalHoldersCount = allHolders.length || null;
+}
+
+const holderSummary = {
+  top10Pct: pctTop10InclLP,
+  topHolders: top10InclLP,
+  top10PctExcludingLP: pctTop10ExclLP,
+  topHoldersExcludingLP: top10ExclLP,
+  lpHolder,
+  holdersCount: finalHoldersCount,
+};
 
     // --- Insiders snapshot --------------------------------------------
 
