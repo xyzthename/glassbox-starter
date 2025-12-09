@@ -296,6 +296,7 @@ async function fetchDexStatsSafe(mint) {
 // --- Origin / protocol detection helper -------------------------------
 
 function detectOrigin({ mint, name, symbol, desc, dexId }) {
+  const lowerMint = (mint || "").toLowerCase();
   const lowerName = (name || "").toLowerCase();
   const lowerSym = (symbol || "").toLowerCase();
   const lowerDesc = (desc || "").toLowerCase();
@@ -311,7 +312,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     words.some((w) => w && str.includes(w.toLowerCase()));
 
   // 1) Pump.fun style
+  // - mint often ends with "pump"
+  // - or metadata mentions Pump.fun
+  // - or pool is on Pump AMM
   if (
+    lowerMint.endsWith("pump") ||
     hasAny(lowerDesc, ["pump.fun"]) ||
     hasAny(lowerName, [" pump", "pump "]) ||
     hasAny(lowerSym, ["pump"]) ||
@@ -324,7 +329,21 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 2) Bags
+  // 2) Bonk ecosystem / Bonkbot style
+  // - mint or name/desc contains "bonk"
+  if (
+    lowerMint.endsWith("bonk") ||
+    hasAny(lowerName, ["bonk"]) ||
+    hasAny(lowerDesc, ["bonk", "bonkbot"])
+  ) {
+    key = "bonk";
+    label = "Bonk ecosystem";
+    detail =
+      "Token appears related to Bonk tooling or branding (e.g. Bonkbot / Bonk launches). Do not assume safety from branding alone – LP and insider distribution still drive risk.";
+    return { key, label, detail };
+  }
+
+  // 3) Bags
   if (
     hasAny(lowerDesc, ["bags.fun"]) ||
     hasAny(lowerName, ["bags "]) ||
@@ -337,7 +356,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 3) Daos.fun
+  // 4) Daos.fun
   if (hasAny(lowerDesc, ["daos.fun"]) || hasAny(lowerName, ["daos"])) {
     key = "daosfun";
     label = "Daos.fun";
@@ -346,7 +365,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 4) Boop
+  // 5) Boop
   if (hasAny(lowerName, ["boop"]) || hasAny(lowerSym, ["boop"])) {
     key = "boop";
     label = "Boop";
@@ -355,7 +374,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 5) Believe / Mayhem / Moonshot / Candle / Heaven / Sugar / Moonit etc.
+  // 6) Other named launch styles (Mayhem, Moonshot, Candle, Heaven, Sugar, Moonit)
   if (hasAny(lowerName, ["mayhem"])) {
     key = "mayhem";
     label = "Mayhem";
@@ -368,7 +387,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "moonshot";
     label = "Moonshot";
     detail =
-      "Name suggests a Moonshot launch. Watch token age and insider activity closely.";
+      "Name suggests a Moonshot-style launch. Watch token age and insider activity closely.";
     return { key, label, detail };
   }
 
@@ -404,8 +423,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 6) Launch platforms / studios (Jupiter Studio, LaunchLab, Wavebreak)
-  if (hasAny(lowerDesc, ["jupiter studio"]) || hasAny(lowerName, ["jupiter studio"])) {
+  // 7) Launch platforms / studios (Jupiter Studio, LaunchLab, Wavebreak)
+  if (
+    hasAny(lowerDesc, ["jupiter studio"]) ||
+    hasAny(lowerName, ["jupiter studio"])
+  ) {
     key = "jupiter-studio";
     label = "Jupiter Studio";
     detail =
@@ -429,7 +451,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 7) AMM / DEX level (Raydium, Orca, Meteora, Pump AMM, Bonk)
+  // 8) AMM / DEX level (Raydium, Orca, Meteora, Pump AMM)
   if (dex === "raydium") {
     key = "raydium";
     label = "Raydium AMM";
@@ -462,17 +484,10 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  if (hasAny(lowerName, ["bonk"]) || hasAny(lowerDesc, ["bonkbot"])) {
-    key = "bonk";
-    label = "Bonk ecosystem";
-    detail =
-      "Token appears related to Bonk tooling or branding. Do not assume safety from branding alone.";
-    return { key, label, detail };
-  }
-
   // If nothing matched, we keep the default "unknown"
   return { key, label, detail };
 }
+
 
 // --- API handler -------------------------------------------------------
 
