@@ -543,34 +543,115 @@ export default async function handler(req, res) {
 
     const originHint = { label: originLabel, detail: originDetail };
 
-    // --- Scam score ----------------------------------------------------
+    // --- GlassBox risk score (v1) --------------------------------------
 
-    let scoreLevel = "medium";
-    let scoreBlurb = "";
-    let score = 50;
-
-    if (!mintInfo.mintAuthority && !mintInfo.freezeAuthority && pctTop10ExclLP <= 35) {
-      scoreLevel = "low";
-      score = 90;
-      scoreBlurb =
-        "Mint & freeze authority renounced, and non-LP top holders are reasonably distributed.";
-    } else if (!mintInfo.mintAuthority && pctTop10ExclLP <= 60) {
-      scoreLevel = "medium";
-      score = 65;
-      scoreBlurb =
-        "Mint authority renounced but non-LP holders still have some concentration.";
-    } else {
-      scoreLevel = "high";
-      score = 25;
-      scoreBlurb =
-        "Mint or freeze authority still active and/or heavy concentration among non-LP holders.";
-    }
-
-    const riskSummary = {
-      level: scoreLevel,
-      blurb: scoreBlurb,
-      score, // GlassBox scam score 0-100
-    };
+      // 1) Mint safety (0–100)
+      let mintScore = 50;
+      if (!mintInfo.mintAuthority && !mintInfo.freezeAuthority) {
+        mintScore = 95; // both renounced
+      } else if (!mintInfo.mintAuthority && mintInfo.freezeAuthority) {
+        mintScore = 75; // mint renounced, freeze still active
+      } else {
+        mintScore = 35; // mint still active (big red flag)
+      }
+      
+      // 2) Holder / insider safety (0–100)
+      const top10PctExclLP = holderSummary.top10PctExcludingLP ?? 0;
+      const insidersPct = insiderSummary.insidersTotalPct ?? 0;
+      
+      let holderScore = 50;
+      if (top10PctExclLP <= 25 && insidersPct <= 30) {
+        holderScore = 90; // nicely spread out
+      } else if (top10PctExclLP <= 40 && insidersPct <= 45) {
+        holderScore = 65; // some concentration, watch it
+      } else {
+        holderScore = 35; // heavy insider / whale stack
+      }
+      
+      // 3) Liquidity safety (0–100)
+      let liqScore = 50;
+      if (liquidityTruth.level === "low") {
+        // "Mostly real" in your existing labels
+        liqScore = 90;
+      } else if (liquidityTruth.level === "medium") {
+        // "Suspicious"
+        liqScore = 60;
+      } else if (liquidityTruth.level === "high") {
+        // "Likely fake / wash"
+        liqScore = 35;
+      }
+      
+      // If you later add 'liquidityLockPct', we can fold it in:
+      const liqLockPct = liquidityTruth.lockPercent ?? null;
+      if (liqLockPct != null) {
+        if (liqLockPct < 50) liqScore -= 15;       // most LP unlockable
+        else if (liqLockPct < 80) liqScore -= 5;   // decent but not great
+        // >=80% stays as-is
+        if (liqScore < 0) liqScore = 0;
+      }
+      
+      // 4) Age / degen safety (0–100)
+      const ageDays = tokenAge?.ageDays ?? null;
+      let ageScore = 50;
+      if (ageDays != null) {
+        if (ageDays < 0.25) {
+          // < 6h old
+          ageScore = 30;       // very degen new
+        } else if (ageDays < 2) {
+          // 6h–2d
+          ageScore = 50;       // neutral
+        } else if (ageDays < 14) {
+          // 2–14d
+          ageScore = 70;       // getting safer
+        } else {
+          // > 14d
+          ageScore = 85;       // survived a while
+        }
+      }
+      
+      // 5) Combine into a single GlassBox score (0–100)
+      // Weights: Mint 30%, Holders 30%, Liquidity 25%, Age 15
+      const score =
+        Math.round(
+          mintScore   * 0.30 +
+          holderScore * 0.30 +
+          liqScore    * 0.25 +
+          ageScore    * 0.15
+        );
+      
+      // Turn that number into a simple label
+      let scoreLevel = "medium";
+      if (score >= 80) {
+        scoreLevel = "low";      // low rug risk
+      } else if (score <= 45) {
+        scoreLevel = "high";     // high rug risk
+      }
+      
+      // Human sentence for the UI
+      let scoreBlurb = "";
+      if (scoreLevel === "low") {
+        scoreBlurb =
+          "Mint, holders, liquidity and age all look relatively healthy. Always DYOR, but this is on the safer side for degen plays.";
+      } else if (scoreLevel === "medium") {
+        scoreBlurb =
+          "Mixed signals across mint, holders, liquidity or age. Treat this as a degen play and size accordingly.";
+      } else {
+        scoreBlurb =
+          "One or more serious red flags across mint, holders, liquidity or age. Extreme rug risk.";
+      }
+      
+      // Final object the frontend uses
+      const riskSummary = {
+        level: scoreLevel, // "low" | "medium" | "high"
+        blurb: scoreBlurb,
+        score,             // 0–100 GlassBox score
+        axes: {
+          mintScore,
+          holderScore,
+          liqScore,
+          ageScore,
+        },
+      };
 
     // --- Dex metrics + age + liquidity truth --------------------------
 
