@@ -1305,70 +1305,55 @@
       }
 
       // === Mayhem Mode UI (title + live countdown) ===
-      const originTitleTextEl = document.getElementById("originTitleText");
-      const originTimerEl = document.getElementById("originMayhemTimer");
+const originTitleTextEl = document.getElementById("originTitleText");
+const originTimerEl = document.getElementById("originMayhemTimer");
 
-      // Clear any previous countdown when we render a new token
-      if (mayhemInterval) {
-        clearInterval(mayhemInterval);
-        mayhemInterval = null;
-      }
+// Clear any previous countdown when we render a new token
+if (mayhemInterval) {
+  clearInterval(mayhemInterval);
+  mayhemInterval = null;
+}
 
-      // 1) Derive Mayhem from Pump.fun + very young age (fallback)
-      let derivedMayhem = null;
-      if (originLabel.toLowerCase().includes("pump.fun") && tokenAge && typeof tokenAge.ageDays === "number") {
-        const ageMinutes = tokenAge.ageDays * 24 * 60;
-        const WINDOW_MINUTES = 30; // assume Mayhem window is 30 minutes
-        if (ageMinutes >= 0 && ageMinutes < WINDOW_MINUTES) {
-          const secondsLeft = Math.max(0, Math.round((WINDOW_MINUTES - ageMinutes) * 60));
-          derivedMayhem = {
-            active: true,
-            secondsRemaining: secondsLeft,
-          };
-        }
-      }
+if (
+  originTitleTextEl &&
+  originTimerEl &&
+  mayhemMode &&
+  mayhemMode.active &&
+  typeof mayhemMode.secondsRemaining === "number" &&
+  mayhemMode.secondsRemaining > 0
+) {
+  originTitleTextEl.textContent = "TOKEN ORIGIN – Mayhem Mode";
+  originTimerEl.style.display = "inline-block";
 
-      // 2) Prefer backend mayhemMode if you ever add it, otherwise use derived
-      const effectiveMayhem =
-        mayhemMode && mayhemMode.active ? mayhemMode : derivedMayhem;
+  let seconds = Math.floor(mayhemMode.secondsRemaining);
 
-      if (originTitleTextEl && originTimerEl) {
-        if (effectiveMayhem && effectiveMayhem.active && effectiveMayhem.secondsRemaining > 0) {
-          originTitleTextEl.textContent = "TOKEN ORIGIN – Mayhem Mode";
-          originTimerEl.style.display = "inline-block";
+  function formatCountdown(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
 
-          let seconds = Math.floor(effectiveMayhem.secondsRemaining);
-
-          function formatCountdown(sec) {
-            const m = Math.floor(sec / 60);
-            const s = sec % 60;
-            const mm = String(m).padStart(2, "0");
-            const ss = String(s).padStart(2, "0");
-            return mm + ":" + ss;
-          }
-
-          function tick() {
-            if (seconds <= 0) {
-              originTimerEl.textContent = "ended";
-              clearInterval(mayhemInterval);
-              mayhemInterval = null;
-              return;
-            }
-            originTimerEl.textContent = formatCountdown(seconds);
-            seconds -= 1;
-          }
-
-          tick();
-          mayhemInterval = setInterval(tick, 1000);
-        } else {
-          // Not in Mayhem Mode → plain title + hide pill
-          originTitleTextEl.textContent = "TOKEN ORIGIN";
-          originTimerEl.style.display = "none";
-          originTimerEl.textContent = "";
-        }
-      }
-      saveRecentMint(mint, symbol, riskLevel);
+  function tick() {
+    if (seconds <= 0) {
+      originTimerEl.textContent = "ended";
+      clearInterval(mayhemInterval);
+      mayhemInterval = null;
+      return;
     }
+    originTimerEl.textContent = formatCountdown(seconds);
+    seconds -= 1;
+  }
+
+  tick();
+  mayhemInterval = setInterval(tick, 1000);
+} else {
+  // Not in Mayhem Mode → plain title + hide pill
+  if (originTitleTextEl) originTitleTextEl.textContent = "TOKEN ORIGIN";
+  if (originTimerEl) {
+    originTimerEl.style.display = "none";
+    originTimerEl.textContent = "";
+  }
+}
 
     async function handleScan() {
       const mint = (mintInput.value || "").trim();
