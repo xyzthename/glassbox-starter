@@ -68,27 +68,47 @@ function shortAddr(a) {
   return `${a.slice(0, 4)}…${a.slice(-4)}`;
 }
 
-// Count holders without downloading full account data
+// Count unique token holders using getProgramAccounts (more accurate)
 async function safeCountTokenHolders(mint) {
   try {
-    const result = await callRpc("getTokenAccountsByMint", [
-      mint,
+    const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+    const result = await callRpc("getProgramAccounts", [
+      TOKEN_PROGRAM_ID,
       {
         commitment: "confirmed",
         encoding: "jsonParsed",
-        dataSlice: { offset: 0, length: 0 }, // just need the list, not balances
+        filters: [
+          { dataSize: 165 },          // SPL token account size
+          {
+            memcmp: {
+              offset: 0,              // mint field
+              bytes: mint,
+            },
+          },
+        ],
       },
     ]);
 
-    if (!result || !Array.isArray(result.value)) return null;
+    if (!result || !Array.isArray(result)) return null;
 
-    // One token account == one holder slot
-    return result.value.length;
+    const owners = new Set();
+
+    for (const acc of result) {
+      const owner = acc?.account?.data?.parsed?.info?.owner;
+      if (typeof owner === "string") {
+        owners.add(owner);
+      }
+    }
+
+    // number of unique owner addresses
+    return owners.size || null;
   } catch (e) {
-    console.error("safeCountTokenHolders error:", e?.message || e);
+    console.error("safeCountTokenHolders error:", mint, e?.message || e);
     return null;
   }
 }
+
 
 
 // --- DexScreener integration ------------------------------------------
