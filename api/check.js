@@ -10,8 +10,14 @@ const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
 // --- Stablecoins we treat specially -----------------------------------
 
+// We whitelist both common USDC mint formats + USDT
 const STABLECOIN_WHITELIST = {
-  // USDC (your version with trailing v)
+  // USDC (canonical Solana mint)
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1": {
+    symbol: "USDC",
+    name: "USD Coin (USDC)",
+  },
+  // USDC (alt / trailing v variant if your wallet shows it that way)
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
     symbol: "USDC",
     name: "USD Coin (USDC)",
@@ -839,7 +845,8 @@ export default async function handler(req, res) {
       avgTradeUsd,
       volume24Usd: vol24,
       txCount24: tx24,
-      // lockPercent: null, // hook for future LP lock %
+      // will wire real % later when we have an LP lock source
+      lockPercent: null,
     };
 
     // --- Origin hint + Mayhem Mode ------------------------------------
