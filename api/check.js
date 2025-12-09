@@ -65,7 +65,6 @@ function shortAddr(a) {
 // Count token accounts – but don’t crash API if it fails
 async function safeCountTokenHolders(mint) {
   try {
-    // Simple config: just ask for all token accounts for this mint
     const result = await callRpc("getTokenAccountsByMint", [
       mint,
       { commitment: "confirmed" },
