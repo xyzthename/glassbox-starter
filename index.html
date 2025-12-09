@@ -972,6 +972,7 @@
         ic.note || "No strong funding-based insider clusters detected among sampled holders.";
       const largestCluster = ic.largestCluster || null;
       const insiderTotalPct = insiderSummary?.insidersTotalPct ?? null;
+      const insiderWalletCount = insiderSummary?.insiderWalletCount ?? 0;
 
       let clusterChipClass = "chip";
       if (clusterRisk === "high") clusterChipClass = "chip bad";
@@ -1176,12 +1177,10 @@
                   ? "warn"
                   : "bad"
               )}">
-                ${
-                  insiderSummary?.insiderCount ?? 0
-                } wallets · ${
-        insiderTotalPct != null ? insiderTotalPct.toFixed(1) + "%" : "N/A"
-      }
-              </span>
+                ${ insiderWalletCount } wallets · ${
+                  insiderTotalPct != null ? insiderTotalPct.toFixed(1) + "%" : "N/A"
+                }
+            </span>
             </div>
             <div class="info-row">
               <span class="info-label">Funding clusters</span>
