@@ -6,416 +6,522 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
-      --bg: #05060a;
-      --card: #0b0f16;
+      --bg: #020617;
+      --card: #020617;
       --accent: #16f29a;
       --accent-soft: rgba(22, 242, 154, 0.12);
-      --border-subtle: rgba(255, 255, 255, 0.06);
-      --text-main: #f7f9ff;
-      --text-muted: #9ca3b5;
-      --danger: #ff4b6b;
-      --warn: #facc15;
+      --border-subtle: rgba(148, 163, 184, 0.4);
+      --border-strong: rgba(148, 163, 184, 0.9);
+      --text-main: #e5e7eb;
+      --text-muted: #64748b;
+      --text-soft: #9ca3af;
+      --danger: #ef4444;
+      --danger-soft: rgba(239, 68, 68, 0.12);
+      --warn: #eab308;
+      --warn-soft: rgba(234, 179, 8, 0.12);
       --good: #22c55e;
-      --chip-bg: rgba(15, 23, 42, 0.95);
-      --chip-border: rgba(148, 163, 184, 0.7);
-      --toxic: #ef4444;
+      --good-soft: rgba(34, 197, 94, 0.12);
+      --chip-bg: #020617;
+      --chip-border: rgba(30, 64, 175, 1);
+      --chip-text: #e5e7eb;
+      --pill-safe: rgba(34, 197, 94, 0.15);
+      --pill-risk: rgba(239, 68, 68, 0.18);
+      --pill-watch: rgba(234, 179, 8, 0.15);
+      --pill-safe-border: #22c55e;
+      --pill-risk-border: #ef4444;
+      --pill-watch-border: #eab308;
+      --shadow-soft: 0 20px 50px rgba(15, 23, 42, 0.85);
+      --shadow-subtle: 0 0 0 1px rgba(148, 163, 184, 0.18);
+      --shadow-strong: 0 18px 45px rgba(15, 23, 42, 0.95);
+      --card-radius: 18px;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-      background:
-        radial-gradient(circle at top, #111827 0, #05060a 40%),
-        radial-gradient(circle at bottom, #020617 0, #000 55%);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Inter", sans-serif;
+      background: radial-gradient(circle at top, #020617 0, #020617 48%, #000 100%);
       color: var(--text-main);
       display: flex;
+      align-items: center;
       justify-content: center;
-      align-items: stretch;
-      padding: 20px;
+      padding: 16px;
     }
 
-    .app {
+    .page {
       width: 100%;
-      max-width: 1200px;
-      margin: auto;
+      max-width: 1080px;
+      margin: 0 auto;
     }
 
-    .frame {
-      border-radius: 24px;
-      padding: 1px;
-      background: linear-gradient(135deg, rgba(22, 242, 154, 0.35), rgba(59, 130, 246, 0.2));
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+    .card {
+      background: radial-gradient(circle at top left, rgba(15, 118, 110, 0.24), transparent 52%),
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.22), transparent 58%),
+        rgba(15, 23, 42, 0.96);
+      border-radius: var(--card-radius);
+      box-shadow: var(--shadow-soft), var(--shadow-subtle);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      padding: 18px 18px 18px;
+      backdrop-filter: blur(18px);
     }
 
-    .inner {
-      border-radius: 24px;
-      background: radial-gradient(circle at top left, #020617 0, #020617 45%, #020617 100%);
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
-      gap: 20px;
-      padding: 18px;
-    }
-
-    @media (max-width: 980px) {
-      .inner {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .left-col {
+    .card-header {
       display: flex;
-      flex-direction: column;
-      gap: 12px;
+      align-items: center;
       justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
     }
 
-    .right-col {
+    .title-block {
       display: flex;
       flex-direction: column;
+      gap: 4px;
     }
 
-    .pill-bar {
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title {
+      font-size: 19px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .beta-pill {
+      font-size: 10px;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      color: var(--text-soft);
+      background: rgba(15, 23, 42, 0.8);
+    }
+
+    .live-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 11px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(22, 242, 154, 0.8);
       font-size: 11px;
-      color: var(--accent);
+      border-radius: 999px;
+      padding: 3px 9px;
+      border: 1px solid rgba(34, 197, 94, 0.7);
+      background: rgba(22, 163, 74, 0.12);
+      color: #bbf7d0;
     }
 
-    .pill-dot {
+    .live-dot {
       width: 8px;
       height: 8px;
       border-radius: 999px;
-      background: radial-gradient(circle at 30% 30%, #16f29a, #22c55e 60%, #052e16);
-      box-shadow: 0 0 0 1px rgba(22, 242, 154, 0.7);
+      background: #22c55e;
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.9);
+      transition: opacity 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
     }
 
-    .hero-title {
-      margin-top: 4px;
-      font-size: 26px;
-      font-weight: 800;
-      line-height: 1.15;
+    .live-dot.off {
+      background: #ef4444;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
     }
 
-    .hero-title span.clean {
-      color: var(--accent);
-    }
-    .hero-title span.toxic {
-      color: var(--toxic);
-    }
-
-    .hero-sub {
-      margin-top: 4px;
-      font-size: 13px;
-      color: var(--text-muted);
-      max-width: 380px;
-    }
-
-    .mint-card {
-      margin-top: 10px;
-      border-radius: 18px;
-      background: rgba(8, 12, 21, 0.96);
-      border: 1px solid rgba(30, 64, 175, 0.7);
-      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9);
-      padding: 12px;
-    }
-
-    .mint-head {
+    .scan-row {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 6px;
+      gap: 10px;
+      margin-bottom: 8px;
     }
 
-    .mint-label {
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
+    .input-wrap {
+      position: relative;
+      flex: 1;
+    }
+
+    .input-label {
+      position: absolute;
+      top: 6px;
+      left: 10px;
       font-size: 10px;
-    }
-
-    .mint-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
     }
 
     .mint-input {
-      flex: 1;
+      width: 100%;
+      background: rgba(15, 23, 42, 0.96);
       border-radius: 999px;
-      border: 1px solid rgba(30, 64, 175, 0.85);
-      background: #020617;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      padding: 20px 14px 6px;
       color: var(--text-main);
-      font-size: 13px;
-      padding: 8px 12px;
       outline: none;
+      font-size: 13px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     }
 
     .mint-input::placeholder {
-      color: rgba(148, 163, 184, 0.9);
+      color: rgba(148, 163, 184, 0.7);
+      font-size: 12px;
     }
 
-    .btn-scan {
-      border-radius: 999px;
-      border: none;
-      padding: 8px 18px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      background: radial-gradient(circle at top, #16f29a, #16a34a 65%);
-      color: #020617;
-      box-shadow: 0 12px 28px rgba(22, 242, 154, 0.45);
+    .mint-input:focus {
+      border-color: rgba(56, 189, 248, 0.9);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3);
+      background: rgba(15, 23, 42, 1);
+    }
+
+    .scan-btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
+      border-radius: 999px;
+      border: 0;
+      padding: 9px 16px;
+      cursor: pointer;
+      background: radial-gradient(circle at top left, #22c55e, #16a34a);
+      color: #022c22;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      box-shadow: 0 12px 25px rgba(34, 197, 94, 0.45);
+      transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
       white-space: nowrap;
     }
 
-    .btn-scan:disabled {
-      opacity: 0.55;
-      box-shadow: none;
+    .scan-btn:disabled {
+      opacity: 0.7;
       cursor: default;
+      box-shadow: none;
     }
 
-    .mint-hint {
-      margin-top: 7px;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      font-size: 11px;
-      color: var(--text-muted);
+    .scan-btn:not(:disabled):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 35px rgba(34, 197, 94, 0.55);
     }
 
-    .hint-icon {
-      width: 18px;
-      height: 18px;
+    .scan-btn:not(:disabled):active {
+      transform: translateY(0);
+      box-shadow: 0 10px 24px rgba(34, 197, 94, 0.4);
+    }
+
+    .scan-spinner {
+      display: none;
+      width: 11px;
+      height: 11px;
       border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
+      border: 2px solid rgba(15, 23, 42, 0.4);
+      border-top-color: #022c22;
+      animation: spin 0.7s linear infinite;
     }
 
-    .recent-wrap {
-      margin-top: 8px;
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
 
-    .recent-label {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      color: var(--text-muted);
-      margin-bottom: 3px;
+    .error-box {
+      display: none;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: #fecaca;
+      background: rgba(127, 29, 29, 0.8);
+      border-radius: 9px;
+      padding: 6px 9px;
+      border: 1px solid #fecaca;
     }
 
-    .risk-pills {
+    .recent-row {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      margin-bottom: 16px;
       font-size: 11px;
     }
 
     .risk-pill {
+      border-radius: 999px;
+      border: 1px solid var(--pill-watch-border);
+      background: var(--pill-watch);
+      color: #fef9c3;
+      padding: 4px 9px;
+      font-size: 11px;
+      cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.75);
-      background: rgba(15, 23, 42, 0.95);
-      font-size: 11px;
-      white-space: nowrap;
-      cursor: pointer;
+      gap: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
 
     .risk-pill.safe {
-      border-color: rgba(22, 242, 154, 0.8);
-      background: rgba(22, 163, 74, 0.2);
+      border-color: var(--pill-safe-border);
+      background: var(--pill-safe);
       color: #bbf7d0;
     }
 
-    .risk-pill.watch {
-      border-color: rgba(250, 204, 21, 0.9);
-      background: rgba(161, 98, 7, 0.4);
-      color: #fef3c7;
-    }
-
     .risk-pill.risky {
-      border-color: rgba(248, 113, 113, 0.9);
-      background: rgba(127, 29, 29, 0.5);
+      border-color: var(--pill-risk-border);
+      background: var(--pill-risk);
       color: #fecaca;
     }
 
-    .risk-pill-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: rgba(22, 242, 154, 0.9);
+    .risk-pill.watch {
+      border-color: var(--pill-watch-border);
+      background: var(--pill-watch);
+      color: #fef9c3;
     }
 
-    .risk-pill-dot.red {
-      background: #ef4444;
+    .main-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      gap: 14px;
     }
 
-    .footer-note {
-      margin-top: 8px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .footer-note a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .result-shell {
-      border-radius: 18px;
-      background: rgba(8, 12, 21, 0.98);
-      border: 1px solid var(--border-subtle);
-      padding: 12px 14px;
-      min-height: 260px;
-    }
-
-    .result-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 8px;
+    .left-col, .right-col {
+      min-width: 0;
     }
 
     .risk-banner {
-      display: inline-flex;
+      border-radius: 14px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: radial-gradient(circle at top left, rgba(34, 197, 94, 0.12), transparent 60%),
+        radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 60%),
+        rgba(15, 23, 42, 0.96);
+      display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.75);
-      background: rgba(15, 23, 42, 0.95);
+      justify-content: space-between;
+      gap: 10px;
     }
 
     .risk-banner.low {
-      border-color: rgba(22, 242, 154, 0.9);
-      background: rgba(22, 163, 74, 0.18);
-      color: var(--accent);
+      border-color: rgba(34, 197, 94, 0.8);
+      background: linear-gradient(135deg, rgba(22, 163, 74, 0.22), rgba(15, 23, 42, 0.96));
     }
 
     .risk-banner.medium {
-      border-color: rgba(250, 204, 21, 0.9);
-      background: rgba(202, 138, 4, 0.18);
-      color: var(--warn);
+      border-color: rgba(234, 179, 8, 0.8);
+      background: linear-gradient(135deg, rgba(234, 179, 8, 0.22), rgba(15, 23, 42, 0.96));
     }
 
     .risk-banner.high {
-      border-color: rgba(248, 113, 113, 0.95);
-      background: rgba(127, 29, 29, 0.5);
-      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.9);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(15, 23, 42, 0.96));
     }
 
-    .result-top-right {
-      font-size: 11px;
-      color: var(--text-muted);
+    .risk-main {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 4px;
     }
 
-    .live-dot {
-      display: inline-block;
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: var(--good);
-      box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.4);
-    }
-
-    .live-dot.off {
-      background: var(--danger);
-      box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.4);
-    }
-
-    .token-header-row {
+    .risk-main-top {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 6px;
+      gap: 8px;
     }
 
-    .token-logo {
-      width: 28px;
-      height: 28px;
+    .risk-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      opacity: 0.85;
+    }
+
+    .risk-score {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .risk-chip {
+      padding: 2px 7px;
       border-radius: 999px;
-      background: radial-gradient(circle at 30% 30%, #1f2937, #020617);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
       border: 1px solid rgba(148, 163, 184, 0.7);
-      background-position: center;
-      background-size: cover;
-      background-repeat: no-repeat;
-      flex-shrink: 0;
+      color: var(--text-soft);
     }
 
-    .token-name {
+    .risk-chip.low {
+      border-color: rgba(34, 197, 94, 0.8);
+      color: #bbf7d0;
+      background: rgba(22, 163, 74, 0.16);
+    }
+
+    .risk-chip.high {
+      border-color: rgba(239, 68, 68, 0.9);
+      color: #fecaca;
+      background: rgba(127, 29, 29, 0.6);
+    }
+
+    .risk-text {
+      font-size: 12px;
+      color: var(--text-soft);
+      max-width: 460px;
+    }
+
+    .risk-axes {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      font-size: 10px;
+    }
+
+    .axis-item {
+      border-radius: 8px;
+      padding: 5px 6px;
+      background: rgba(15, 23, 42, 0.98);
+      border: 1px solid rgba(30, 64, 175, 0.75);
+    }
+
+    .axis-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .axis-score {
       font-size: 13px;
       font-weight: 600;
     }
 
-    .token-symbol {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-left: 4px;
+    .token-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed rgba(30, 64, 175, 0.7);
     }
 
-    .token-subtitle {
+    .token-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, rgba(30, 64, 175, 0.26), #020617);
+      font-size: 14px;
+    }
+
+    .token-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .token-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .token-name-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+
+    .token-name {
+      font-size: 15px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .token-symbol {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .token-mint {
+      font-size: 11px;
+      color: var(--text-soft);
+      word-break: break-all;
+    }
+
+    .token-side {
+      text-align: right;
+      min-width: 120px;
+    }
+
+    .token-price {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .token-liq {
       font-size: 11px;
       color: var(--text-muted);
     }
 
     .metrics-row {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 6px;
-      margin: 8px 0;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
     }
 
-    @media (max-width: 820px) {
-      .metrics-row {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-    }
-
-    .metric {
+    .metric-box {
       border-radius: 10px;
+      padding: 6px 7px;
       background: #020617;
-      border: 1px solid rgba(31, 41, 55, 0.9);
-      padding: 6px 8px;
-      font-size: 11px;
+      border: 1px solid rgba(30, 64, 175, 0.85);
     }
 
     .metric-label {
+      font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      font-size: 10px;
       color: var(--text-muted);
-      margin-bottom: 2px;
+      margin-bottom: 3px;
     }
 
     .metric-value {
-      font-size: 12px;
-      font-weight: 500;
+      font-size: 13px;
+      font-weight: 600;
     }
 
     .metric-sub {
+      margin-top: 1px;
       font-size: 10px;
-      color: var(--text-muted);
+      color: var(--text-soft);
+    }
+
+    .holders-box {
+      border-radius: 10px;
+      padding: 7px 8px;
+      margin-bottom: 10px;
+      background: #020617;
+      border: 1px solid rgba(30, 64, 175, 0.85);
     }
 
     .section-heading {
@@ -423,285 +529,239 @@
       text-transform: uppercase;
       letter-spacing: 0.14em;
       color: var(--text-muted);
-      margin-top: 4px;
-      margin-bottom: 3px;
-    }
-
-    .two-col {
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr);
-      gap: 8px;
-    }
-
-    @media (max-width: 820px) {
-      .two-col {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .info-card {
-      border-radius: 10px;
-      background: #020617;
-      border: 1px dashed rgba(31, 41, 55, 0.9);
-      padding: 6px 8px;
-      font-size: 11px;
-    }
-
-    .info-row {
+      margin-bottom: 4px;
       display: flex;
-      justify-content: space-between;
       align-items: center;
       gap: 6px;
-      margin-bottom: 3px;
-    }
-
-    .info-label {
-      color: var(--text-muted);
-    }
-
-    .chip {
-      border-radius: 999px;
-      padding: 2px 8px;
-      border: 1px solid var(--chip-border);
-      background: var(--chip-bg);
-      font-size: 10px;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      white-space: nowrap;
-    }
-
-    .chip.good {
-      border-color: rgba(22, 242, 154, 0.85);
-      background: rgba(22, 163, 74, 0.18);
-      color: var(--accent);
-    }
-
-    .chip.bad {
-      border-color: rgba(248, 113, 113, 0.9);
-      background: rgba(127, 29, 29, 0.5);
-      color: var(--danger);
-    }
-
-    .chip.warn {
-      border-color: rgba(250, 204, 21, 0.9);
-      background: rgba(161, 98, 7, 0.4);
-      color: var(--warn);
     }
 
     .info-note {
-      margin-top: 2px;
       font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .holders-box {
-      margin-top: 6px;
-      border-radius: 10px;
-      background: #020617;
-      border: 1px solid rgba(31, 41, 55, 0.9);
-      padding: 6px 8px;
-      font-size: 11px;
+      color: var(--text-soft);
+      line-height: 1.3;
     }
 
     .holder-list {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      margin-top: 4px;
+      margin-top: 6px;
     }
 
     .holder-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       border-radius: 999px;
-      padding: 4px 8px;
-      border: 1px solid var(--chip-border);
-      background: var(--chip-bg);
+      padding: 3px 8px;
       font-size: 11px;
       text-decoration: none;
-      color: var(--text-main);
-      white-space: nowrap;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      color: #e5e7eb;
+      background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.25), transparent 55%),
+        #020617;
     }
 
     .holder-pill.lp {
-      border-color: rgba(56, 189, 248, 0.95);
+      border-color: rgba(56, 189, 248, 0.9);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5);
     }
 
     .origin-box {
-      margin-top: 6px;
       border-radius: 10px;
+      padding: 7px 8px;
+      margin-bottom: 10px;
       background: #020617;
-      border: 1px dashed rgba(31, 41, 55, 0.9);
-      padding: 6px 8px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .origin-box b {
-      color: var(--accent);
-    }
-
-    /* Mayhem Mode countdown pill */
-    .mayhem-timer {
-      margin-left: 8px;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 2px 6px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 204, 0, 0.5);
-      background: rgba(255, 204, 0, 0.08);
-      color: #ffcc33;
+      border: 1px solid rgba(30, 64, 175, 0.85);
     }
 
     .tools-row {
-      margin-top: 8px;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      font-size: 11px;
+      margin-bottom: 10px;
     }
 
     .tool-pill {
-      padding: 4px 9px;
+      font-size: 11px;
       border-radius: 999px;
-      border: 1px solid var(--chip-border);
-      background: var(--chip-bg);
-      color: var(--text-main);
+      padding: 4px 8px;
       text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      background: rgba(15, 23, 42, 0.98);
+      color: #e5e7eb;
     }
 
     .bottom-row {
-      margin-top: 8px;
       display: flex;
-      justify-content: space-between;
-      gap: 6px;
-      flex-wrap: wrap;
-      font-size: 11px;
       align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 4px;
     }
 
     .btn-ghost {
-      padding: 4px 9px;
       border-radius: 999px;
-      border: 1px solid var(--chip-border);
-      background: transparent;
-      color: var(--text-muted);
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
+      padding: 4px 9px;
       font-size: 11px;
-      text-decoration: none;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      background: rgba(15, 23, 42, 0.98);
+      color: var(--text-soft);
+      cursor: pointer;
     }
 
     .jup-btn {
-      border-radius: 999px;
-      padding: 6px 12px;
-      border: 1px solid rgba(22, 242, 154, 0.9);
-      background: rgba(22, 163, 74, 0.18);
-      color: var(--accent);
       display: inline-flex;
       align-items: center;
-      gap: 7px;
-      cursor: pointer;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 5px 11px;
       font-size: 11px;
+      border: 1px solid rgba(56, 189, 248, 0.85);
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.3), #020617);
+      color: #e0f2fe;
+      cursor: pointer;
     }
 
     .jup-icon {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       border-radius: 999px;
-      background: radial-gradient(circle at 30% 30%, #16f29a, #16a34a 60%, #020617);
-      box-shadow: 0 0 0 1px rgba(22, 242, 154, 0.85);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-image: url("jupiter-logo.png"); /* put your Jupiter logo asset here */
     }
 
-    .error-box {
-      margin-top: 6px;
-      padding: 6px 8px;
+    .cluster-box {
       border-radius: 10px;
-      border: 1px solid rgba(248, 113, 113, 0.95);
-      background: rgba(127, 29, 29, 0.45);
-      font-size: 12px;
-      color: var(--danger);
-      display: none;
+      padding: 7px 8px;
+      margin-bottom: 10px;
+      background: #020617;
+      border: 1px solid rgba(30, 64, 175, 0.85);
+    }
+
+    .mayhem-timer {
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 2px 7px;
+      border: 1px solid rgba(234, 179, 8, 0.9);
+      color: #fef9c3;
+      background: rgba(234, 179, 8, 0.18);
+    }
+
+    @media (max-width: 780px) {
+      .main-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .card {
+        padding: 14px 12px 14px;
+      }
+      .title {
+        font-size: 17px;
+      }
+      .risk-axes {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 480px) {
+      .scan-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .scan-btn {
+        width: 100%;
+        justify-content: center;
+      }
+      .bottom-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .bottom-row > div {
+        width: 100%;
+      }
+      .jup-btn {
+        justify-content: center;
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <div class="frame">
-      <div class="inner">
-        <!-- LEFT SIDE -->
+  <div class="page">
+    <div class="card">
+      <div class="card-header">
+        <div class="title-block">
+          <div class="title-row">
+            <div class="title">GlassBox</div>
+            <span class="beta-pill">Phase 1 · Solana</span>
+          </div>
+          <div class="sub">Paste any Solana token mint → get a fast rug-risk snapshot.</div>
+        </div>
+        <div class="live-pill">
+          <div id="liveDot" class="live-dot"></div>
+          <span>Backend status</span>
+        </div>
+      </div>
+
+      <div class="scan-row">
+        <div class="input-wrap">
+          <div class="input-label">Solana token mint</div>
+          <input
+            id="mintInput"
+            class="mint-input"
+            placeholder="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (USDC) or any SPL token"
+          />
+        </div>
+        <button id="scanBtn" class="scan-btn" type="button">
+          <span id="scanBtnLabel">Scan</span>
+          <div id="scanBtnSpinner" class="scan-spinner"></div>
+        </button>
+      </div>
+
+      <div id="errorBox" class="error-box"></div>
+
+      <div id="recentRow" class="recent-row"></div>
+
+      <div class="main-layout">
         <div class="left-col">
-          <div>
-            <div class="pill-bar">
-              <span class="pill-dot"></span>
-              <span>GlassBox v0.1</span>
-              <span>Mint · Freeze · Holders · Origin</span>
-            </div>
-            <div class="hero-title">
-              Paste a Solana token mint.<br />
-              See if it’s <span class="clean">clean</span> or <span class="toxic">toxic</span> in seconds.
-            </div>
-            <div class="hero-sub">
-              No wallet connect. No signup. Just an instant on-chain safety read on any SPL token mint.
-            </div>
-
-            <div class="mint-card">
-              <div class="mint-head">
-                <span class="mint-label">Token mint address</span>
-                <span>Solana SPL or Token-2022 mint</span>
+          <div id="resultLeft">
+            <div class="risk-banner">
+              <div class="risk-main">
+                <div class="risk-main-top">
+                  <div class="risk-label">Overview</div>
+                  <div class="risk-score">—</div>
+                  <div class="risk-chip">No scan yet</div>
+                </div>
+                <div class="risk-text">
+                  Paste a Solana mint above and hit Scan to see mint safety,
+                  holder concentration, liquidity truth, and token age.
+                </div>
               </div>
-              <div class="mint-row">
-                <input
-                  id="mintInput"
-                  class="mint-input"
-                  type="text"
-                  placeholder="Ex: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1 (USDC)"
-                />
-                <button id="scanBtn" class="btn-scan">
-                  <span id="scanBtnLabel">Scan</span>
-                  <span id="scanBtnSpinner" style="display:none;">⏳</span>
-                </button>
-              </div>
-              <div class="mint-hint">
-                <div class="hint-icon">🔒</div>
-                <div>We never see or store your wallet or keys. Only mint + public on-chain data.</div>
-              </div>
-
-              <!-- recent scans -->
-              <div class="recent-wrap">
-                <div class="recent-label">Recent scans</div>
-                <div id="recentRow" class="risk-pills"></div>
-              </div>
-            </div>
-
-            <div class="footer-note">
-              Built for degen safety by
-              <a href="https://x.com/Glassboxscans" target="_blank" rel="noopener noreferrer">@GlassBox</a>
             </div>
           </div>
         </div>
-
-        <!-- RIGHT SIDE -->
         <div class="right-col">
-          <div class="result-shell">
-            <div id="resultBox">
-              <div style="font-size:12px;color:var(--text-muted);">
-                Paste a Solana token mint on the left and hit <b>Scan</b> to see:
-                <ul style="padding-left:18px;margin:4px 0;">
-                  <li>Mint / freeze authority status</li>
-                  <li>Holder concentration + insider clusters</li>
-                  <li>Liquidity truth and lock % bands</li>
-                  <li>Likely origin (Pump.fun, stables, etc.)</li>
-                </ul>
-                Then route to Jupiter, DexScreener, Axiom, Photon, BullX, Parde, Solpump, or Stalk.fun in one tap.
+          <div id="resultRight">
+            <div class="holders-box">
+              <div class="section-heading">Holder clusters</div>
+              <div class="info-note">
+                Holder & insider details will appear here after your first scan.
               </div>
             </div>
-            <div id="errorBox" class="error-box"></div>
+            <div class="origin-box">
+              <div class="section-heading">
+                <span id="originTitleText">TOKEN ORIGIN</span>
+                <span id="originMayhemTimer" class="mayhem-timer" style="display:none;"></span>
+              </div>
+              <div class="info-note">
+                Launch origin (Pump.fun, Mayhem, Raydium, etc.) will appear here after a scan.
+              </div>
+            </div>
+            <div class="tools-row">
+              <span class="tool-pill" style="opacity:0.6;">Tools unlock after your first scan.</span>
+            </div>
           </div>
         </div>
       </div>
@@ -709,25 +769,16 @@
   </div>
 
   <script>
-    /* ====== YOUR AFFILIATE / REF LINKS ====== */
-    const JUP_REF   = "3Gkf49tYL3JNjawedx9HX94LbnSMQ6eTQLTR8i8rkxWG";
-    const AXIOM_URL = "https://axiom.trade/@dudexyz";
-    const BULLX_URL = "https://t.me/BullxBetaBot?start=access_N3OJF4TE16J";
-    const PARDE_URL = "https://trade.padre.gg/rk/dudexyz";
-    const PHOTON_URL = "https://photon-sol.tinyastro.io/@xyzthegod";
-    const STALK_URL  = "https://stalk.fun/?r=ZATEZOJI";
-    const SOLPUMP_URL = "https://solpump.io/a/DUDEXYZ";
-    /* ========================================= */
-
     const API_BASE = "/api/check";
 
     const mintInput = document.getElementById("mintInput");
     const scanBtn = document.getElementById("scanBtn");
     const scanBtnLabel = document.getElementById("scanBtnLabel");
     const scanBtnSpinner = document.getElementById("scanBtnSpinner");
-    const resultBox = document.getElementById("resultBox");
     const errorBox = document.getElementById("errorBox");
     const recentRow = document.getElementById("recentRow");
+    const resultLeft = document.getElementById("resultLeft");
+    const resultRight = document.getElementById("resultRight");
 
     const RECENT_KEY = "glassbox_recent_mints";
     const MAX_RECENT = 5;
@@ -788,8 +839,22 @@
       if (n < 1000) return "$" + n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
       if (n < 1_000_000) return "$" + n.toFixed(0);
       if (n < 1_000_000_000)
-        return "$" + (n / 1_000_000).toFixed(2).replace(/0+$/, "").replace(/\.$/, "") + "M";
-      return "$" + (n / 1_000_000_000).toFixed(2).replace(/0+$/, "").replace(/\.$/, "") + "B";
+        return (
+          "$" +
+          (n / 1_000_000)
+            .toFixed(2)
+            .replace(/0+$/, "")
+            .replace(/\.$/, "") +
+          "M"
+        );
+      return (
+        "$" +
+        (n / 1_000_000_000)
+          .toFixed(2)
+          .replace(/0+$/, "")
+          .replace(/\.$/, "") +
+        "B"
+      );
     }
 
     function formatAge(tokenAge) {
@@ -836,11 +901,10 @@
       return "risk-banner";
     }
 
-    function chipClass(level) {
-      if (level === "good") return "chip good";
-      if (level === "bad") return "chip bad";
-      if (level === "warn") return "chip warn";
-      return "chip";
+    function riskChipClass(level) {
+      if (level === "low") return "risk-chip low";
+      if (level === "high") return "risk-chip high";
+      return "risk-chip";
     }
 
     function updateLiveDot(ok) {
@@ -876,24 +940,28 @@
       try {
         const raw = localStorage.getItem(RECENT_KEY);
         if (!raw) {
-          recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+          recentRow.innerHTML =
+            '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
           return;
         }
         const arr = JSON.parse(raw);
         if (!Array.isArray(arr) || !arr.length) {
-          recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+          recentRow.innerHTML =
+            '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
           return;
         }
         renderRecentMints(arr);
       } catch {
-        recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+        recentRow.innerHTML =
+          '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
       }
     }
 
     function renderRecentMints(arr) {
       if (!recentRow) return;
       if (!arr || !arr.length) {
-        recentRow.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
+        recentRow.innerHTML =
+          '<span style="font-size:11px;color:var(--text-muted);">No scans yet.</span>';
         return;
       }
       recentRow.innerHTML = arr
@@ -910,13 +978,11 @@
               ? "Safe"
               : "Watch";
 
-          const label =
-            item.symbol || (idx + 1) + " · " + riskLabel;
+          const label = item.symbol || (idx + 1) + " · " + riskLabel;
 
           return `<button type="button" class="${cls}" data-mint="${item.mint}">
-                    <span class="risk-pill-dot ${item.risk === "high" ? "red" : ""}"></span>
-                    <span>${label}</span>
-                  </button>`;
+              ${label}
+            </button>`;
         })
         .join("");
     }
@@ -928,292 +994,262 @@
         holderSummary,
         insiderSummary,
         originHint,
+        mayhemMode,
         riskSummary,
         tokenMetrics,
         tokenAge,
         liquidityTruth,
         socials,
-        mayhemMode, // new from backend
       } = data;
 
       const name = tokenMeta?.name || "Unknown Token";
       const symbol = tokenMeta?.symbol || "";
-      const logo = tokenMeta?.logoURI || null;
+      const logoURI = tokenMeta?.logoURI || null;
+
+      const priceUsd = tokenMetrics?.priceUsd ?? null;
+      const liqUsd = tokenMetrics?.liquidityUsd ?? null;
+      const dexFeesUsd24h = tokenMetrics?.dexFeesUsd24h ?? null;
 
       const ageFmt = formatAge(tokenAge);
 
-      const rawSupply = mintInfo?.supply;
-      const decimals = mintInfo?.decimals ?? 0;
-      const supplyHuman =
-        rawSupply != null ? Number(rawSupply) / Math.pow(10, decimals || 0) : null;
-
-      const holdersCount = holderSummary?.holdersCount ?? null;
-      const top10Pct = holderSummary?.top10PctExcludingLP ?? holderSummary?.top10Pct ?? null;
-      const lpHolder = holderSummary?.lpHolder || null;
-      const topHolders = holderSummary?.topHolders || [];
-
-      // Use mintInfo flags
-      const renouncedMint = mintInfo ? !mintInfo.mintAuthority : false;
-      const canFreeze = mintInfo ? !!mintInfo.freezeAuthority : false;
-
-      const liqTruthLevel = liquidityTruth?.level || "unknown";
       const liqTruthLabel = liquidityTruth?.label || "Unknown";
-      const liqTruthNote =
-        liquidityTruth?.note ||
-        "Not enough DEX data to judge whether liquidity is real or spoofed.";
+      const liqTruthNote = liquidityTruth?.note || "No liquidity pattern yet.";
+      const tradeToLiquidity = liquidityTruth?.tradeToLiquidity ?? null;
+      const avgTradeUsd = liquidityTruth?.avgTradeUsd ?? null;
+      const vol24Usd = liquidityTruth?.volume24Usd ?? null;
+      const tx24 = liquidityTruth?.txCount24 ?? null;
 
-      const lockPercent = liquidityTruth?.lockPercent;
-      let liqLockLabel = "Unknown";
-      let liqLockChipClass = "chip warn";
-      if (typeof lockPercent === "number" && !isNaN(lockPercent)) {
-        const pct = Math.max(0, Math.min(100, lockPercent));
-        liqLockLabel = pct.toFixed(0) + "% locked";
-        if (pct >= 90) liqLockChipClass = "chip good";
-        else if (pct >= 80) liqLockChipClass = "chip warn";
-        else liqLockChipClass = "chip bad";
-      }
+      const top10Pct = holderSummary?.top10Pct ?? null;
+      const top10PctExLP = holderSummary?.top10PctExcludingLP ?? null;
+      const topHolders = holderSummary?.topHolders || [];
+      const lpHolder = holderSummary?.lpHolder || null;
+      const holdersCount = holderSummary?.holdersCount ?? null;
 
-      const riskLevel = riskSummary?.level || "unknown";
-      let riskLabel = "Unknown risk";
-      if (riskLevel === "low") riskLabel = "Low rug risk (mint side)";
-      else if (riskLevel === "medium") riskLabel = "Medium risk";
-      else if (riskLevel === "high") riskLabel = "High rug risk";
+      const insidersTotalPct = insiderSummary?.insidersTotalPct ?? null;
+      const insiderWalletCount = insiderSummary?.insiderWalletCount ?? null;
+      const whales = insiderSummary?.whales || [];
+      const insiderRiskLevel = insiderSummary?.riskLevel || "low";
+      const insiderNote = insiderSummary?.note || "";
 
-      const scoreRaw = typeof riskSummary?.score === "number" ? riskSummary.score : null;
-      const score = scoreRaw != null ? Math.max(0, Math.min(100, scoreRaw)) : null;
+      const score = riskSummary?.score ?? null;
+      const riskLevel = riskSummary?.level || "medium";
+      const riskBlurb = riskSummary?.blurb || "";
 
-      const ic = data.insiderClusters || {};
-      const clusterRisk = ic.riskLevel || "low";
-      const clusterNote =
-        ic.note || "No strong funding-based insider clusters detected among sampled holders.";
-      const largestCluster = ic.largestCluster || null;
-      const insiderTotalPct = insiderSummary?.insidersTotalPct ?? null;
-      const insiderWalletCount = insiderSummary?.insiderWalletCount ?? 0;
+      const axes = riskSummary?.axes || {};
+      const mintScore = axes.mintScore ?? null;
+      const holderScore = axes.holderScore ?? null;
+      const liqScore = axes.liqScore ?? null;
+      const ageScore = axes.ageScore ?? null;
 
-      let clusterChipClass = "chip";
-      if (clusterRisk === "high") clusterChipClass = "chip bad";
-      else if (clusterRisk === "medium") clusterChipClass = "chip warn";
-      else if (clusterRisk === "low") clusterChipClass = "chip good";
+      const originLabel = originHint?.label || "Unknown origin";
+      const originDetail = originHint?.detail || "";
+      const originKey = originHint?.key || "unknown";
 
-      const clusterHeadline = largestCluster
-        ? `${largestCluster.holderAddresses.length} wallets via ${shortAddr(
-            largestCluster.funder
-          )} · ~${largestCluster.pctOfSupply.toFixed(1)}%`
-        : "No strong cluster among sampled holders.";
-
-      const top10BarWidth =
-        top10Pct != null && !isNaN(top10Pct)
-          ? Math.max(0, Math.min(100, top10Pct))
-          : null;
-
-      const originLabel = originHint?.label || "Unknown protocol / origin";
-      let originDetail =
-        originHint?.detail ||
-        "Origin could not be confidently determined from mint pattern.";
-
-      const lowerOriginLabel = originLabel.toLowerCase();
-      if (lowerOriginLabel.includes("pump.fun") && !lowerOriginLabel.includes("amm")) {
-        originDetail +=
-          " Pump.fun launches usually come with locked LP, but always double-check lock Tx + pair.";
-      }
-
-      // Social pill (comes from backend DexScreener info)
-      let socialLabel = null;
+      // Choose a social link for the ghost button
       let socialUrl = null;
-      if (socials) {
-        if (socials.twitter) {
-          socialLabel = "View tweet / X";
-          socialUrl = socials.twitter;
-        } else if (socials.website) {
-          socialLabel = "Visit website";
-          socialUrl = socials.website;
-        } else if (socials.telegram) {
-          socialLabel = "Open Telegram";
-          socialUrl = socials.telegram;
-        } else if (socials.tiktok) {
-          socialLabel = "View TikTok";
-          socialUrl = socials.tiktok;
-        }
+      let socialLabel = null;
+      if (socials?.twitter) {
+        socialUrl = socials.twitter;
+        socialLabel = "Twitter / X";
+      } else if (socials?.telegram) {
+        socialUrl = socials.telegram;
+        socialLabel = "Telegram";
+      } else if (socials?.website) {
+        socialUrl = socials.website;
+        socialLabel = "Website";
       }
 
-      // Route URLs with Jupiter referral
-      const jupUrl = `https://jup.ag/swap/SOL-${encodeURIComponent(
-        mint
-      )}?referrer=${encodeURIComponent(JUP_REF)}`;
-      const dexsUrl = `https://dexscreener.com/solana/${mint}`;
-      const axiomUrl = AXIOM_URL;
-      const photonUrl = PHOTON_URL;
-      const bullxUrl = BULLX_URL;
-      const pardeUrl = PARDE_URL;
-      const stalkUrl = STALK_URL;
-      const solpumpUrl = SOLPUMP_URL;
+      // Jupiter URL (add your ?ref=code if needed)
+      const jupUrl = "https://jup.ag/swap/SOL-" + encodeURIComponent(mint);
 
-      resultBox.innerHTML = `
-        <div class="result-top">
-          <div class="${bannerClass(riskLevel)}">
-            <span>GlassBox risk</span>
-            <span>•</span>
-            <span>${riskLabel}</span>
-          </div>
-          <div class="result-top-right">
-            <span id="liveDot" class="live-dot"></span>
-            <span>Live on-chain scan</span>
-          </div>
-        </div>
+      const riskChipText =
+        riskLevel === "low"
+          ? "Safer-side degen"
+          : riskLevel === "high"
+          ? "Extreme risk"
+          : "Mixed signals";
 
-        <div class="token-header-row">
-          <div class="token-logo" style="${
-            logo ? `background-image:url('${logo.replace(/"/g, "")}');` : ""
-          }"></div>
-          <div>
-            <div class="token-name">
-              ${name}
-              ${symbol ? `<span class="token-symbol">(${symbol})</span>` : ""}
+      const scoreText = score != null ? String(score) : "—";
+
+      const ageSubText = ageFmt.sub || "";
+
+      const liqTruthExtra = [];
+      if (tradeToLiquidity != null)
+        liqTruthExtra.push(
+          "Vol/Liq: " + tradeToLiquidity.toFixed(1) + "×"
+        );
+      if (avgTradeUsd != null)
+        liqTruthExtra.push("Avg trade: " + formatUsd(avgTradeUsd));
+      if (vol24Usd != null)
+        liqTruthExtra.push("24h vol: " + formatUsd(vol24Usd));
+      if (tx24 != null) liqTruthExtra.push("24h trades: " + tx24);
+
+      const liqTruthSub =
+        liqTruthExtra.length ? liqTruthExtra.join(" · ") : "";
+
+      let clusterHeadline = "";
+      if (insidersTotalPct != null && insiderWalletCount != null) {
+        clusterHeadline =
+          insidersTotalPct.toFixed(1) +
+          "% held by " +
+          insiderWalletCount +
+          "+ insider wallets";
+      } else {
+        clusterHeadline = "Insider distribution data.";
+      }
+
+      const clusterRisk =
+        insiderRiskLevel === "high"
+          ? "High"
+          : insiderRiskLevel === "medium"
+          ? "Medium"
+          : "Low";
+
+      const whaleNote =
+        whales && whales.length
+          ? whales.length + " wallets hold ≥5% each."
+          : "No ≥5% whale wallets detected (excluding LP).";
+
+      // Holder bar visual
+      const basePct = top10PctExLP ?? top10Pct ?? 0;
+      const top10BarWidth = Math.max(0, Math.min(100, basePct));
+
+      // === LEFT SIDE ===
+      resultLeft.innerHTML = `
+        <div class="${bannerClass(riskLevel)}">
+          <div class="risk-main">
+            <div class="risk-main-top">
+              <div class="risk-label">GlassBox score</div>
+              <div class="risk-score">${scoreText}</div>
+              <div class="${riskChipClass(riskLevel)}">${riskChipText}</div>
             </div>
-            <div class="token-subtitle">${shortAddr(mint)}</div>
+            <div class="risk-text">${riskBlurb}</div>
+          </div>
+          <div class="risk-axes">
+            <div class="axis-item">
+              <div class="axis-label">Mint safety</div>
+              <div class="axis-score">${mintScore ?? "—"}</div>
+            </div>
+            <div class="axis-item">
+              <div class="axis-label">Holders</div>
+              <div class="axis-score">${holderScore ?? "—"}</div>
+            </div>
+            <div class="axis-item">
+              <div class="axis-label">Liquidity truth</div>
+              <div class="axis-score">${liqScore ?? "—"}</div>
+            </div>
+            <div class="axis-item">
+              <div class="axis-label">Token age</div>
+              <div class="axis-score">${ageScore ?? "—"}</div>
+            </div>
           </div>
         </div>
 
-        ${
-          riskSummary?.blurb
-            ? `<div class="token-subtitle" style="margin-top:2px;">${riskSummary.blurb}</div>`
-            : ""
-        }
-
-        ${
-          score !== null
-            ? `
-        <div style="margin:6px 0 4px 0;">
-          <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:2px;">
-            <span>GlassBox scam score (0–100)</span>
-            <span style="color:var(--accent);font-weight:600;">${score.toFixed(0)}/100</span>
+        <div class="token-row">
+          <div class="token-logo">
+            ${
+              logoURI
+                ? `<img src="${logoURI}" alt="${symbol || name}" />`
+                : (symbol || "?").slice(0, 3).toUpperCase()
+            }
           </div>
-          <div style="height:6px;border-radius:999px;background:#020617;border:1px solid rgba(31,41,55,0.9);overflow:hidden;">
-            <div style="height:100%;width:${score}%;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444);"></div>
+          <div class="token-main">
+            <div class="token-name-row">
+              <div class="token-name">${name}</div>
+              <div class="token-symbol">${symbol || ""}</div>
+            </div>
+            <div class="token-mint">${mint}</div>
+          </div>
+          <div class="token-side">
+            <div class="token-price">${formatUsd(priceUsd)}</div>
+            <div class="token-liq">Liq: ${formatUsd(liqUsd)}</div>
           </div>
         </div>
-        `
-            : ""
-        }
 
         <div class="metrics-row">
-          <div class="metric">
-            <div class="metric-label">Price</div>
-            <div class="metric-value">${formatUsd(tokenMetrics?.priceUsd)}</div>
+          <div class="metric-box">
+            <div class="metric-label">Price (USD)</div>
+            <div class="metric-value">${formatUsd(priceUsd)}</div>
+            <div class="metric-sub">24h DEX fees (est.): ${formatUsd(
+              dexFeesUsd24h
+            )}</div>
           </div>
-          <div class="metric">
-            <div class="metric-label">Liquidity</div>
-            <div class="metric-value">${formatUsd(tokenMetrics?.liquidityUsd)}</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">Supply</div>
-            <div class="metric-value">${
-              supplyHuman != null ? formatNumber(supplyHuman) : "—"
-            }</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">Holders</div>
-            <div class="metric-value">${
-              holdersCount != null ? formatNumber(holdersCount) : "N/A"
-            }</div>
-            ${
-              holdersCount == null
-                ? `<div class="metric-sub">RPC limit / index missing</div>`
-                : ""
-            }
-          </div>
-          <div class="metric">
+          <div class="metric-box">
             <div class="metric-label">Token age</div>
             <div class="metric-value">${ageFmt.main}</div>
-            ${ageFmt.sub ? `<div class="metric-sub">${ageFmt.sub}</div>` : ""}
+            <div class="metric-sub">${ageSubText}</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Liquidity truth</div>
+            <div class="metric-value">${liqTruthLabel}</div>
+            <div class="metric-sub">${liqTruthSub || liqTruthNote}</div>
           </div>
         </div>
 
-        <div class="two-col">
-          <div class="info-card">
-            <div class="section-heading">Token info</div>
-            <div class="info-row">
-              <span class="info-label">Mint authority</span>
-              <span class="${chipClass(renouncedMint ? "good" : "bad")}">
-                ${renouncedMint ? "Renounced / disabled" : "Can still mint"}
-              </span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Freeze authority</span>
-              <span class="${chipClass(canFreeze ? "bad" : "good")}">
-                ${canFreeze ? "Can freeze tokens" : "None"}
-              </span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Liquidity lock %</span>
-              <span class="${liqLockChipClass}">${liqLockLabel}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Liquidity truth</span>
-              <span class="${chipClass(
-                liqTruthLevel === "low" ? "good" : liqTruthLevel === "high" ? "bad" : "warn"
-              )}" title="${liqTruthNote.replace(/"/g, "&quot;")}">
-                ${liqTruthLabel}
-              </span>
-            </div>
-            <div class="info-note">
-              ${
-                renouncedMint
-                  ? "No more supply can be minted from this authority."
-                  : "Mint authority still active – dev can mint more supply."
-              }
-            </div>
-          </div>
-
-          <div class="info-card">
-            <div class="section-heading">Holder risk</div>
-            <div class="info-row">
-              <span class="info-label">Top 10 (excl. LP)</span>
-              <span class="${chipClass(
-                top10Pct != null && top10Pct <= 25
-                  ? "good"
-                  : top10Pct != null && top10Pct <= 50
-                  ? "warn"
-                  : "bad"
-              )}">
-                ${
-                  top10Pct != null
-                    ? top10Pct.toFixed(1) + "% of supply"
-                    : "N/A"
-                }
-              </span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Insider wallets ≥1%</span>
-              <span class="${chipClass(
-                insiderTotalPct != null && insiderTotalPct <= 20
-                  ? "good"
-                  : insiderTotalPct != null && insiderTotalPct <= 40
-                  ? "warn"
-                  : "bad"
-              )}">
-                ${ insiderWalletCount } wallets · ${
-                  insiderTotalPct != null ? insiderTotalPct.toFixed(1) + "%" : "N/A"
-                }
-            </span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Funding clusters</span>
-              <span class="${clusterChipClass}">${clusterHeadline}</span>
-            </div>
+        <div class="metric-box">
+          <div class="metric-label">Mint & freeze</div>
+          <div class="metric-value">
             ${
-              top10BarWidth !== null
-                ? `
-            <div style="margin-top:4px;font-size:10px;color:var(--text-muted);">
-              ${top10Pct.toFixed(1)}% held by top 10 wallets (excl. LP)
-            </div>
-            <div style="margin-top:2px;height:4px;border-radius:999px;background:#020617;border:1px solid rgba(31,41,55,0.9);overflow:hidden;">
-              <div style="height:100%;width:${top10BarWidth}%;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444);"></div>
-            </div>`
+              mintInfo
+                ? (!mintInfo.mintAuthority && !mintInfo.freezeAuthority
+                    ? "Mint + freeze fully renounced"
+                    : !mintInfo.mintAuthority && mintInfo.freezeAuthority
+                    ? "Mint renounced, freeze active"
+                    : "Mint + freeze still active")
+                : "—"
+            }
+          </div>
+          <div class="metric-sub">
+            ${
+              mintInfo
+                ? "Mint authority: " +
+                  (mintInfo.mintAuthority ? "Active" : "Renounced") +
+                  " · Freeze: " +
+                  (mintInfo.freezeAuthority ? "Active" : "None")
                 : ""
             }
-            <div class="info-note">${clusterNote}</div>
           </div>
+        </div>
+      `;
+
+      // === RIGHT SIDE ===
+      resultRight.innerHTML = `
+        <div class="cluster-box">
+          <div class="section-heading">Holder clusters & insiders</div>
+          <div class="metric-value" style="font-size:12px;margin-bottom:4px;">
+            ${
+              insidersTotalPct != null
+                ? insidersTotalPct.toFixed(1) +
+                  "% of supply held by " +
+                  (insiderWalletCount ?? "—") +
+                  " insider wallets"
+                : "Insider % not available."
+            }
+          </div>
+          <div class="metric-sub" style="margin-bottom:4px;">
+            Risk band: <b>${clusterRisk}</b>${
+              holdersCount != null
+                ? " · " +
+                  holdersCount.toLocaleString() +
+                  " known holder accounts"
+                : ""
+            }
+          </div>
+          <div class="metric-sub" style="margin-bottom:4px;">${whaleNote}</div>
+          <div class="info-note">${insiderNote}</div>
+          ${
+            top10PctExLP != null
+              ? `
+              <div style="margin-top:6px;font-size:10px;color:var(--text-muted);">
+                ${top10PctExLP.toFixed(
+                  1
+                )}% held by top 10 non-LP wallets
+              </div>
+              <div style="margin-top:2px;height:4px;border-radius:999px;background:#020617;border:1px solid rgba(31,41,55,0.9);overflow:hidden;">
+                <div style="height:100%;width:${top10BarWidth}%;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444);"></div>
+              </div>`
+              : ""
+          }
         </div>
 
         <div class="holders-box">
@@ -1228,9 +1264,12 @@
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 class="holder-pill ${isLp ? "lp" : ""}">
-                                ${String(idx + 1).padStart(2, "0")}. ${shortAddr(h.address)} · ${h.pct.toFixed(2)}%${
-                        isLp ? " · LP" : ""
-                      }
+                                ${String(idx + 1).padStart(
+                                  2,
+                                  "0"
+                                )}. ${shortAddr(h.address)} · ${h.pct.toFixed(
+                        2
+                      )}%${isLp ? " · LP" : ""}
                               </a>`;
                     })
                     .join("")}
@@ -1242,23 +1281,35 @@
         <div class="origin-box">
           <div class="section-heading">
             <span id="originTitleText">TOKEN ORIGIN</span>
-            <!-- timer starts hidden by default -->
             <span id="originMayhemTimer" class="mayhem-timer" style="display:none;"></span>
           </div>
           <div>
-            <b>${originLabel}</b>
-            ${originDetail ? " – " + originDetail : ""}
+            <b>${originLabel}</b>${originDetail ? " – " + originDetail : ""}
           </div>
         </div>
 
         <div class="tools-row">
-          <a class="tool-pill" href="${dexsUrl}" target="_blank" rel="noopener noreferrer">📊 DexScreener</a>
-          <a class="tool-pill" href="${axiomUrl}" target="_blank" rel="noopener noreferrer">🧠 Axiom</a>
-          <a class="tool-pill" href="${photonUrl}" target="_blank" rel="noopener noreferrer">⚡ Photon</a>
-          <a class="tool-pill" href="${bullxUrl}" target="_blank" rel="noopener noreferrer">🐂 BullX</a>
-          <a class="tool-pill" href="${pardeUrl}" target="_blank" rel="noopener noreferrer">⚙️ Parde</a>
-          <a class="tool-pill" href="${solpumpUrl}" target="_blank" rel="noopener noreferrer">💧 Solpump</a>
-          <a class="tool-pill" href="${stalkUrl}" target="_blank" rel="noopener noreferrer">🕵️ Stalk.fun</a>
+          <a class="tool-pill" href="https://dexscreener.com/solana/${encodeURIComponent(
+            mint
+          )}" target="_blank" rel="noopener noreferrer">📊 DexScreener</a>
+          <a class="tool-pill" href="https://axiom.trade/token/${encodeURIComponent(
+            mint
+          )}" target="_blank" rel="noopener noreferrer">🧠 Axiom</a>
+          <a class="tool-pill" href="https://photon-sol.tinyastro.io/en/lp/${encodeURIComponent(
+            mint
+          )}" target="_blank" rel="noopener noreferrer">⚡ Photon</a>
+          <a class="tool-pill" href="https://bullx.io/terminal?chainId=1399811149&address=${encodeURIComponent(
+            mint
+          )}" target="_blank" rel="noopener noreferrer">🐂 BullX</a>
+          <a class="tool-pill" href="https://padre.trade/token/${encodeURIComponent(
+            mint
+          )}" target="_blank" rel="noopener noreferrer">⚙️ Padre</a>
+          <a class="tool-pill" href="https://sol-pump.vercel.app/token/${encodeURIComponent(
+            mint
+          )}" target="_blank" rel="noopener noreferrer">💧 Solpump</a>
+          <a class="tool-pill" href="https://stalk.fun/solana/${encodeURIComponent(
+            mint
+          )}" target="_blank" rel="noopener noreferrer">🕵️ Stalk.fun</a>
         </div>
 
         <div class="bottom-row">
@@ -1282,13 +1333,16 @@
 
       const jupBtn = document.getElementById("jupBtn");
       if (jupBtn) {
-        jupBtn.onclick = () => window.open(jupUrl, "_blank", "noopener,noreferrer");
+        jupBtn.onclick = () =>
+          window.open(jupUrl, "_blank", "noopener,noreferrer");
       }
 
       const copyMintBtn = document.getElementById("copyMintBtn");
       if (copyMintBtn) {
         copyMintBtn.onclick = async () => {
-          try { await navigator.clipboard.writeText(mint); } catch {}
+          try {
+            await navigator.clipboard.writeText(mint);
+          } catch {}
         };
       }
 
@@ -1296,11 +1350,15 @@
       if (copySummaryBtn) {
         copySummaryBtn.onclick = async () => {
           const summary = `${name} (${symbol || "no symbol"})\nMint: ${mint}\nRisk: ${
-            riskLabel
+            riskChipText
           }\nInsiders: ${
-            insiderTotalPct != null ? insiderTotalPct.toFixed(1) + "%" : "N/A"
+            insidersTotalPct != null
+              ? insidersTotalPct.toFixed(1) + "%"
+              : "N/A"
           }\nCluster: ${clusterRisk} – ${clusterHeadline}`;
-          try { await navigator.clipboard.writeText(summary); } catch {}
+          try {
+            await navigator.clipboard.writeText(summary);
+          } catch {}
         };
       }
 
@@ -1314,13 +1372,20 @@
         mayhemInterval = null;
       }
 
-      // 1) Derive Mayhem from Pump.fun + very young age (fallback)
+      // 1) Derived Mayhem fallback (Pump.fun + very fresh)
       let derivedMayhem = null;
-      if (originLabel.toLowerCase().includes("pump.fun") && tokenAge && typeof tokenAge.ageDays === "number") {
+      if (
+        originLabel.toLowerCase().includes("pump.fun") &&
+        tokenAge &&
+        typeof tokenAge.ageDays === "number"
+      ) {
         const ageMinutes = tokenAge.ageDays * 24 * 60;
-        const WINDOW_MINUTES = 30; // assume Mayhem window is 30 minutes
+        const WINDOW_MINUTES = 30;
         if (ageMinutes >= 0 && ageMinutes < WINDOW_MINUTES) {
-          const secondsLeft = Math.max(0, Math.round((WINDOW_MINUTES - ageMinutes) * 60));
+          const secondsLeft = Math.max(
+            0,
+            Math.round((WINDOW_MINUTES - ageMinutes) * 60)
+          );
           derivedMayhem = {
             active: true,
             secondsRemaining: secondsLeft,
@@ -1328,12 +1393,16 @@
         }
       }
 
-      // 2) Prefer backend mayhemMode if you ever add it, otherwise use derived
+      // 2) Prefer backend Mayhem if present
       const effectiveMayhem =
         mayhemMode && mayhemMode.active ? mayhemMode : derivedMayhem;
 
       if (originTitleTextEl && originTimerEl) {
-        if (effectiveMayhem && effectiveMayhem.active && effectiveMayhem.secondsRemaining > 0) {
+        if (
+          effectiveMayhem &&
+          effectiveMayhem.active &&
+          effectiveMayhem.secondsRemaining > 0
+        ) {
           originTitleTextEl.textContent = "TOKEN ORIGIN – Mayhem Mode";
           originTimerEl.style.display = "inline-block";
 
@@ -1361,12 +1430,12 @@
           tick();
           mayhemInterval = setInterval(tick, 1000);
         } else {
-          // Not in Mayhem Mode → plain title + hide pill
           originTitleTextEl.textContent = "TOKEN ORIGIN";
           originTimerEl.style.display = "none";
           originTimerEl.textContent = "";
         }
       }
+
       saveRecentMint(mint, symbol, riskLevel);
     }
 
@@ -1379,7 +1448,9 @@
       clearError();
       setLoading(true);
       try {
-        const res = await fetch(API_BASE + "?mint=" + encodeURIComponent(mint));
+        const res = await fetch(
+          API_BASE + "?mint=" + encodeURIComponent(mint)
+        );
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data?.error || "Backend error");
