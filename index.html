@@ -1314,30 +1314,21 @@
         mayhemInterval = null;
       }
 
-      // 1) Derive Mayhem from Pump.fun + very young age (fallback)
-      let derivedMayhem = null;
-      if (originLabel.toLowerCase().includes("pump.fun") && tokenAge && typeof tokenAge.ageDays === "number") {
-        const ageMinutes = tokenAge.ageDays * 24 * 60;
-        const WINDOW_MINUTES = 30; // assume Mayhem window is 30 minutes
-        if (ageMinutes >= 0 && ageMinutes < WINDOW_MINUTES) {
-          const secondsLeft = Math.max(0, Math.round((WINDOW_MINUTES - ageMinutes) * 60));
-          derivedMayhem = {
-            active: true,
-            secondsRemaining: secondsLeft,
-          };
-        }
-      }
-
-      // 2) Prefer backend mayhemMode if you ever add it, otherwise use derived
+      // Only trust Mayhem from the backend flag.
       const effectiveMayhem =
-        mayhemMode && mayhemMode.active ? mayhemMode : derivedMayhem;
+        mayhemMode &&
+        mayhemMode.active &&
+        typeof mayhemMode.secondsRemaining === "number" &&
+        mayhemMode.secondsRemaining > 0
+          ? mayhemMode
+          : null;
 
       if (originTitleTextEl && originTimerEl) {
-        if (effectiveMayhem && effectiveMayhem.active && effectiveMayhem.secondsRemaining > 0) {
+        if (effectiveMayhem) {
           originTitleTextEl.textContent = "TOKEN ORIGIN – Mayhem Mode";
           originTimerEl.style.display = "inline-block";
 
-          let seconds = Math.floor(effectiveMayhem.secondsRemaining);
+          let seconds = Math.floor(effectiveMayhem.secondsRemaining || 0);
 
           function formatCountdown(sec) {
             const m = Math.floor(sec / 60);
@@ -1367,6 +1358,8 @@
           originTimerEl.textContent = "";
         }
       }
+
+      // keep recent-mints behavior
       saveRecentMint(mint, symbol, riskLevel);
     }
 
