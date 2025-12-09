@@ -69,47 +69,52 @@ function shortAddr(a) {
 }
 
 // Count unique token holders using getProgramAccounts (more accurate)
+// Count unique wallet owners with a non-zero balance for this mint
 async function safeCountTokenHolders(mint) {
   try {
-    const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+    const TOKEN_PROGRAM_ID =
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
     const result = await callRpc("getProgramAccounts", [
       TOKEN_PROGRAM_ID,
       {
-        commitment: "confirmed",
+        commitment: "processed",
         encoding: "jsonParsed",
         filters: [
-          { dataSize: 165 },          // SPL token account size
+          { dataSize: 165 },         // SPL token account size
           {
             memcmp: {
-              offset: 0,              // mint field
-              bytes: mint,
+              offset: 0,             // mint field starts at byte 0
+              bytes: mint,           // only accounts for this mint
             },
           },
         ],
       },
     ]);
 
-    if (!result || !Array.isArray(result)) return null;
-
+    const accounts = Array.isArray(result) ? result : [];
     const owners = new Set();
 
-    for (const acc of result) {
-      const owner = acc?.account?.data?.parsed?.info?.owner;
-      if (typeof owner === "string") {
-        owners.add(owner);
-      }
+    for (const acc of accounts) {
+      const parsed = acc.account?.data?.parsed;
+      const info = parsed?.info;
+      if (!info) continue;
+
+      const owner = info.owner;
+      const uiAmount = info.tokenAmount?.uiAmount ?? 0;
+
+      // only count real holders (non-zero balance)
+      if (!owner || !uiAmount || uiAmount <= 0) continue;
+      owners.add(owner);
     }
 
-    // number of unique owner addresses
-    return owners.size || null;
+    if (owners.size === 0) return null;
+    return owners.size;
   } catch (e) {
-    console.error("safeCountTokenHolders error:", mint, e?.message || e);
+    console.error("safeCountTokenHolders error for mint", mint, e?.message || e);
     return null;
   }
 }
-
-
 
 // --- DexScreener integration ------------------------------------------
 
