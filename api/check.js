@@ -307,14 +307,10 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
   let detail =
     "Origin could not be confidently determined from mint pattern, metadata, or pool.";
 
-  // Tiny helper: does any of the words appear in a string?
   const hasAny = (str, words) =>
     words.some((w) => w && str.includes(w.toLowerCase()));
 
   // 1) Pump.fun style
-  // - mint often ends with "pump"
-  // - or metadata mentions Pump.fun
-  // - or pool is on Pump AMM
   if (
     lowerMint.endsWith("pump") ||
     hasAny(lowerDesc, ["pump.fun"]) ||
@@ -329,7 +325,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 2) Bonk ecosystem / Bonkbot style
+  // 2) Bonk ecosystem
   if (
     lowerMint.endsWith("bonk") ||
     hasAny(lowerName, ["bonk"]) ||
@@ -342,8 +338,22 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 3) Bags
+  // 3) Sugar
   if (
+    lowerMint.endsWith("sugar") ||
+    hasAny(lowerName, ["sugar"]) ||
+    hasAny(lowerDesc, ["sugar"])
+  ) {
+    key = "sugar";
+    label = "Sugar";
+    detail =
+      "Mint or metadata suggests a Sugar-style launch. LP and insider distribution remain the main safety signals.";
+    return { key, label, detail };
+  }
+
+  // 4) Bags
+  if (
+    lowerMint.endsWith("bags") ||
     hasAny(lowerDesc, ["bags.fun"]) ||
     hasAny(lowerName, ["bags "]) ||
     hasAny(lowerSym, ["bags"])
@@ -351,21 +361,26 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "bags";
     label = "Bags";
     detail =
-      "Token metadata resembles Bags-style launches. Holder and LP distribution still need to be checked carefully.";
+      "Token metadata or mint pattern resembles Bags-style launches. Holder and LP distribution still need to be checked carefully.";
     return { key, label, detail };
   }
 
-  // 4) Daos.fun
-  if (hasAny(lowerDesc, ["daos.fun"]) || hasAny(lowerName, ["daos"])) {
+  // 5) Daos.fun
+  if (
+    hasAny(lowerDesc, ["daos.fun"]) ||
+    hasAny(lowerName, ["daos "]) ||
+    hasAny(lowerSym, ["daos"])
+  ) {
     key = "daosfun";
     label = "Daos.fun";
     detail =
-      "Likely launched via Daos.fun. Governance / DAO features may apply, but rug risk still depends on insiders and LP.";
+      "Likely launched via Daos.fun. Governance or DAO features may apply, but rug risk still depends on insiders and LP.";
     return { key, label, detail };
   }
 
-  // 5) Believe
+  // 6) Believe
   if (
+    lowerMint.endsWith("blv") ||
     hasAny(lowerName, ["believe"]) ||
     hasAny(lowerSym, ["blv"]) ||
     hasAny(lowerDesc, ["believe protocol"])
@@ -377,57 +392,75 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 6) Boop
-  if (hasAny(lowerName, ["boop"]) || hasAny(lowerSym, ["boop"])) {
+  // 7) Boop
+  if (
+    lowerMint.endsWith("boop") ||
+    hasAny(lowerName, ["boop"]) ||
+    hasAny(lowerSym, ["boop"])
+  ) {
     key = "boop";
     label = "Boop";
     detail =
-      "Name / symbol suggests a Boop-style launch. Check for concentrated insiders and LP unlock risk.";
+      "Name, symbol or mint suffix suggests a Boop-style launch. Check for concentrated insiders and LP unlock risk.";
     return { key, label, detail };
   }
 
-  // 7) Other named launch styles (Mayhem, Moonshot, Candle, Heaven, Sugar, Moonit)
-  if (hasAny(lowerName, ["mayhem"])) {
+  // 8) Mayhem / Moonshot / Candle / Heaven / Moonit
+
+  if (
+    lowerMint.endsWith("mayhem") ||
+    hasAny(lowerName, ["mayhem"]) ||
+    hasAny(lowerDesc, ["mayhem"])
+  ) {
     key = "mayhem";
     label = "Mayhem";
     detail =
-      "Token name matches Mayhem-style launches. Risk depends heavily on insiders and LP behaviour.";
+      "Token name or mint pattern matches Mayhem-style launches. Risk depends heavily on insiders and LP behaviour.";
     return { key, label, detail };
   }
 
-  if (hasAny(lowerName, ["moonshot"])) {
+  if (
+    lowerMint.endsWith("moonshot") ||
+    hasAny(lowerName, ["moonshot"]) ||
+    hasAny(lowerDesc, ["moonshot"])
+  ) {
     key = "moonshot";
     label = "Moonshot";
     detail =
-      "Name suggests a Moonshot-style launch. Watch token age and insider activity closely.";
+      "Looks like a Moonshot-style launch. Watch token age and insider activity closely.";
     return { key, label, detail };
   }
 
-  if (hasAny(lowerName, ["candle"])) {
+  if (
+    lowerMint.endsWith("candle") ||
+    hasAny(lowerName, ["candle"]) ||
+    hasAny(lowerDesc, ["candle"])
+  ) {
     key = "candle";
     label = "Candle";
     detail =
-      "Token name suggests a Candle-style launch. Check LP lock and holder distribution.";
+      "Token name or mint suggests a Candle-style launch. Check LP lock and holder distribution.";
     return { key, label, detail };
   }
 
-  if (hasAny(lowerName, ["heaven"])) {
+  if (
+    lowerMint.endsWith("heaven") ||
+    hasAny(lowerName, ["heaven"]) ||
+    hasAny(lowerDesc, ["heaven"])
+  ) {
     key = "heaven";
     label = "Heaven";
     detail =
-      "Heaven-style branding detected from metadata. Still a degen launch; treat risk as normal for memes.";
+      "Heaven-style branding detected from metadata or mint. Still a degen launch; treat risk as normal for memes.";
     return { key, label, detail };
   }
 
-  if (hasAny(lowerName, ["sugar"])) {
-    key = "sugar";
-    label = "Sugar";
-    detail =
-      "Name matches Sugar-style launches. LP and insider distribution remain the main safety signals.";
-    return { key, label, detail };
-  }
-
-  if (hasAny(lowerName, ["moonit", "moont"])) {
+  if (
+    lowerMint.endsWith("moonit") ||
+    lowerMint.endsWith("moont") ||
+    hasAny(lowerName, ["moonit", "moont"]) ||
+    hasAny(lowerDesc, ["moonit", "moont"])
+  ) {
     key = "moonit";
     label = "Moonit";
     detail =
@@ -435,7 +468,8 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 8) Launch platforms / studios (Jupiter Studio, LaunchLab, Wavebreak, Dynamic BC)
+  // 9) Launch platforms / studios (Jupiter Studio, LaunchLab, Wavebreak, Dynamic BC)
+
   if (
     hasAny(lowerDesc, ["jupiter studio"]) ||
     hasAny(lowerName, ["jupiter studio"])
@@ -447,7 +481,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  if (hasAny(lowerDesc, ["launchlab"]) || hasAny(lowerName, ["launchlab"])) {
+  if (
+    hasAny(lowerDesc, ["launchlab"]) ||
+    hasAny(lowerName, ["launchlab"]) ||
+    lowerMint.endsWith("launchlab")
+  ) {
     key = "launchlab";
     label = "LaunchLab";
     detail =
@@ -455,7 +493,10 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  if (hasAny(lowerDesc, ["wavebreak"]) || hasAny(lowerName, ["wavebreak"])) {
+  if (
+    hasAny(lowerDesc, ["wavebreak"]) ||
+    hasAny(lowerName, ["wavebreak"])
+  ) {
     key = "wavebreak";
     label = "Wavebreak";
     detail =
@@ -463,15 +504,19 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  if (hasAny(lowerName, ["dynamic bc"]) || hasAny(lowerDesc, ["dynamic bc"])) {
+  if (
+    hasAny(lowerName, ["dynamic bc"]) ||
+    hasAny(lowerDesc, ["dynamic bc", "dynamicbc"])
+  ) {
     key = "dynamic-bc";
     label = "Dynamic BC";
     detail =
-      "Token metadata references Dynamic BC. Treat as an experimental AMM/launch style; LP and insiders still drive rug risk.";
+      "Token metadata references Dynamic BC. Treat as an experimental launch style; LP and insiders still drive rug risk.";
     return { key, label, detail };
   }
 
-  // 9) AMM / DEX level (Raydium, Orca, Meteora, Pump AMM, Meteora V2)
+  // 10) AMM / DEX level (Raydium, Orca, Meteora, Pump AMM)
+
   if (dex === "raydium") {
     key = "raydium";
     label = "Raydium AMM";
@@ -488,8 +533,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // Some APIs may distinguish Meteora v1/v2; for now treat both as Meteora AMM
-  if (dex === "meteora") {
+  if (dex === "meteora" || dex === "meteora-amm-v2" || dex === "meteora-amm") {
     key = "meteora";
     label = "Meteora AMM";
     detail =
@@ -505,7 +549,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // If nothing matched, we keep the default "unknown"
+  // default
   return { key, label, detail };
 }
 
