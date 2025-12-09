@@ -2,7 +2,7 @@
 // GlassBox backend – v2
 // - Helius RPC for mint + holders
 // - DexScreener for price / liquidity / age / volume / tx count / socials
-// - Insider snapshot + holder summary + simple scam score
+// - Insider snapshot + holder summary + risk score
 // - IMPORTANT: never hard-code HELIUS key, only use process.env
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
@@ -11,7 +11,7 @@ const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 // --- Stablecoins we treat specially -----------------------------------
 
 const STABLECOIN_WHITELIST = {
-  // USDC
+  // USDC (your version with trailing v)
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
     symbol: "USDC",
     name: "USD Coin (USDC)",
@@ -70,13 +70,12 @@ async function safeCountTokenHolders(mint) {
       {
         encoding: "jsonParsed",
         commitment: "confirmed",
-        // ask the RPC to slice out data so the payload is smaller
         dataSlice: { offset: 0, length: 0 },
       },
     ]);
 
     if (!result || !Array.isArray(result.value)) return null;
-    return result.value.length;      // exact holder count
+    return result.value.length; // exact holder count
   } catch (e) {
     console.error("safeCountTokenHolders error:", e?.message);
     return null;
@@ -85,20 +84,6 @@ async function safeCountTokenHolders(mint) {
 
 // --- DexScreener integration ------------------------------------------
 
-/**
- * Uses DexScreener "token-pairs" endpoint:
- *   GET https://api.dexscreener.com/token-pairs/v1/solana/{mint}
- *
- * Returns:
- *  - priceUsd
- *  - liquidityUsd
- *  - ageDays
- *  - volume24Usd
- *  - txCount24
- *  - dexFeesUsd24h  (~0.3% of vol24)
- *  - poolMintReserve (for LP matching)
- *  - socials { website, twitter, telegram, discord, others[] }  (URLs)
- */
 async function fetchDexAndAgeStatsFromDexScreener(mint) {
   const chainId = "solana";
   const url = `https://api.dexscreener.com/token-pairs/v1/${chainId}/${mint}`;
@@ -118,6 +103,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       dexFeesUsd24h: null,
       poolMintReserve: null,
       socials: null,
+      dexId: null,
     };
   }
 
@@ -132,10 +118,8 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       p.liquidity && typeof p.liquidity.usd === "number"
         ? p.liquidity.usd
         : Number(p.liquidity?.usd ?? NaN);
-    const priceUsd =
-      p.priceUsd != null ? Number(p.priceUsd) : NaN;
-    const priceNative =
-      p.priceNative != null ? Number(p.priceNative) : NaN;
+    const priceUsd = p.priceUsd != null ? Number(p.priceUsd) : NaN;
+    const priceNative = p.priceNative != null ? Number(p.priceNative) : NaN;
 
     if (!liqUsd || Number.isNaN(liqUsd) || Number.isNaN(priceUsd)) continue;
 
@@ -149,7 +133,11 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
       myPriceUsd = priceUsd;
       poolMintReserve =
         p.liquidity?.base != null ? Number(p.liquidity.base) : null;
-    } else if (quoteAddr === mintLower && !Number.isNaN(priceNative) && priceNative !== 0) {
+    } else if (
+      quoteAddr === mintLower &&
+      !Number.isNaN(priceNative) &&
+      priceNative !== 0
+    ) {
       myPriceUsd = priceUsd / priceNative;
       poolMintReserve =
         p.liquidity?.quote != null ? Number(p.liquidity.quote) : null;
@@ -170,7 +158,6 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
   }
 
   if (!best) {
-    // fall back to any highest-liquidity pair if mapping fails
     const p = pairs.reduce((a, b) =>
       (a.liquidity?.usd || 0) >= (b.liquidity?.usd || 0) ? a : b
     );
@@ -205,7 +192,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
 
   if (volume24 != null) dexFeesUsd24h = volume24 * 0.003;
 
-  // NOTE: DexScreener pairCreatedAt is in ms (per docs)
+  // pairCreatedAt in ms
   if (selected.pairCreatedAt != null) {
     const createdMs = Number(selected.pairCreatedAt);
     const now = Date.now();
@@ -214,7 +201,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     }
   }
 
-  // Socials + website (we’ll use URLs, not handles)
+  // Socials + website (URLs)
   let socials = null;
   if (selected.info) {
     const info = selected.info;
@@ -270,7 +257,7 @@ async function fetchDexAndAgeStatsFromDexScreener(mint) {
     txCount24,
     dexFeesUsd24h,
     socials,
-    dexId: selected.dexId ? String(selected.dexId).toLowerCase() : null, // <--
+    dexId: selected.dexId ? String(selected.dexId).toLowerCase() : null,
   };
 }
 
@@ -310,7 +297,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
   const hasAny = (str, words) =>
     words.some((w) => w && str.includes(w.toLowerCase()));
 
-  // 1) Pump.fun style
+  // Pump.fun
   if (
     lowerMint.endsWith("pump") ||
     hasAny(lowerDesc, ["pump.fun"]) ||
@@ -325,7 +312,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 2) Bonk ecosystem
+  // Bonk ecosystem
   if (
     lowerMint.endsWith("bonk") ||
     hasAny(lowerName, ["bonk"]) ||
@@ -334,11 +321,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "bonk";
     label = "Bonk ecosystem";
     detail =
-      "Token appears related to Bonk tooling or branding. Do not assume safety from branding alone – LP and insider distribution still drive risk.";
+      "Token appears related to Bonk tooling or branding. LP and insider distribution still drive risk.";
     return { key, label, detail };
   }
 
-  // 3) Sugar
+  // Sugar
   if (
     lowerMint.endsWith("sugar") ||
     hasAny(lowerName, ["sugar"]) ||
@@ -351,7 +338,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 4) Bags
+  // Bags
   if (
     lowerMint.endsWith("bags") ||
     hasAny(lowerDesc, ["bags.fun"]) ||
@@ -361,11 +348,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "bags";
     label = "Bags";
     detail =
-      "Token metadata or mint pattern resembles Bags-style launches. Holder and LP distribution still need to be checked carefully.";
+      "Token metadata or mint pattern resembles Bags-style launches. Check LP and holder spread carefully.";
     return { key, label, detail };
   }
 
-  // 5) Daos.fun
+  // Daos.fun
   if (
     hasAny(lowerDesc, ["daos.fun"]) ||
     hasAny(lowerName, ["daos "]) ||
@@ -374,11 +361,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "daosfun";
     label = "Daos.fun";
     detail =
-      "Likely launched via Daos.fun. Governance or DAO features may apply, but rug risk still depends on insiders and LP.";
+      "Likely launched via Daos.fun. Governance/DAO features may apply, but rug risk still depends on insiders and LP.";
     return { key, label, detail };
   }
 
-  // 6) Believe
+  // Believe
   if (
     lowerMint.endsWith("blv") ||
     hasAny(lowerName, ["believe"]) ||
@@ -388,11 +375,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "believe";
     label = "Believe";
     detail =
-      "Branding suggests a Believe-style launch. Treat like other degen launchpads – LP and insider structure are what matter.";
+      "Branding suggests a Believe-style launch. LP and insider structure are what matter for safety.";
     return { key, label, detail };
   }
 
-  // 7) Boop
+  // Boop
   if (
     lowerMint.endsWith("boop") ||
     hasAny(lowerName, ["boop"]) ||
@@ -405,20 +392,20 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 8) Mayhem / Moonshot / Candle / Heaven / Moonit
-
+  // Mayhem
   if (
     lowerMint.endsWith("mayhem") ||
     hasAny(lowerName, ["mayhem"]) ||
     hasAny(lowerDesc, ["mayhem"])
   ) {
     key = "mayhem";
-    label = "Mayhem";
+    label = "Mayhem Protocol";
     detail =
-      "Token name or mint pattern matches Mayhem-style launches. Risk depends heavily on insiders and LP behaviour.";
+      "Token appears linked to Mayhem’s high-volatility launch mechanics. Expect extremely degen early trading conditions.";
     return { key, label, detail };
   }
 
+  // Moonshot
   if (
     lowerMint.endsWith("moonshot") ||
     hasAny(lowerName, ["moonshot"]) ||
@@ -427,10 +414,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "moonshot";
     label = "Moonshot";
     detail =
-      "Looks like a Moonshot-style launch. Watch token age and insider activity closely.";
+      "Moonshot-style launch. Watch token age and insider activity closely.";
     return { key, label, detail };
   }
 
+  // Candle
   if (
     lowerMint.endsWith("candle") ||
     hasAny(lowerName, ["candle"]) ||
@@ -443,6 +431,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
+  // Heaven
   if (
     lowerMint.endsWith("heaven") ||
     hasAny(lowerName, ["heaven"]) ||
@@ -451,10 +440,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "heaven";
     label = "Heaven";
     detail =
-      "Heaven-style branding detected from metadata or mint. Still a degen launch; treat risk as normal for memes.";
+      "Heaven-style branding detected. Still a degen launch; treat risk as normal for memes.";
     return { key, label, detail };
   }
 
+  // Moonit
   if (
     lowerMint.endsWith("moonit") ||
     lowerMint.endsWith("moont") ||
@@ -468,8 +458,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 9) Launch platforms / studios (Jupiter Studio, LaunchLab, Wavebreak, Dynamic BC)
-
+  // Jupiter Studio
   if (
     hasAny(lowerDesc, ["jupiter studio"]) ||
     hasAny(lowerName, ["jupiter studio"])
@@ -477,10 +466,11 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "jupiter-studio";
     label = "Jupiter Studio";
     detail =
-      "Likely created via Jupiter Studio or associated tools. Origin is more structured, but rug risk still depends on LP and insiders.";
+      "Likely created via Jupiter Studio or associated tools. Origin is more structured, but LP and insiders still drive risk.";
     return { key, label, detail };
   }
 
+  // LaunchLab
   if (
     hasAny(lowerDesc, ["launchlab"]) ||
     hasAny(lowerName, ["launchlab"]) ||
@@ -493,6 +483,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
+  // Wavebreak
   if (
     hasAny(lowerDesc, ["wavebreak"]) ||
     hasAny(lowerName, ["wavebreak"])
@@ -504,6 +495,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
+  // Dynamic BC
   if (
     hasAny(lowerName, ["dynamic bc"]) ||
     hasAny(lowerDesc, ["dynamic bc", "dynamicbc"])
@@ -515,13 +507,12 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 10) AMM / DEX level (Raydium, Orca, Meteora, Pump AMM)
-
+  // AMMs
   if (dex === "raydium") {
     key = "raydium";
     label = "Raydium AMM";
     detail =
-      "Primary liquidity pool is on Raydium. LP safety depends on lock / burn status and who holds the LP tokens.";
+      "Primary liquidity pool is on Raydium. LP safety depends on lock/burn status and who holds the LP tokens.";
     return { key, label, detail };
   }
 
@@ -537,7 +528,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "meteora";
     label = "Meteora AMM";
     detail =
-      "Primary liquidity pool is on Meteora AMM. Dynamic pools can be capital-efficient but LP unlocks can still rug.";
+      "Primary liquidity pool is on Meteora. Dynamic pools can be capital-efficient but LP unlocks can still rug.";
     return { key, label, detail };
   }
 
@@ -545,14 +536,12 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "pump-amm";
     label = "Pump AMM";
     detail =
-      "Token trades mainly via Pump AMM liquidity. Verify LP lock / burn and top-holder distribution.";
+      "Token trades mainly via Pump AMM liquidity. Verify LP lock/burn and top-holder distribution.";
     return { key, label, detail };
   }
 
-  // default
   return { key, label, detail };
 }
-
 
 // --- API handler -------------------------------------------------------
 
@@ -720,22 +709,21 @@ export default async function handler(req, res) {
       0
     );
 
-   // If RPC holder count failed, fall back to “at least number of known holders”
-    
-      let finalHoldersCount = holdersCount;
-      if (finalHoldersCount == null) {
-        // fallback: at least this many holders exist
-        finalHoldersCount = allHolders.length || null;
-      }
-      
-      const holderSummary = {
-        top10Pct: pctTop10InclLP,
-        topHolders: top10InclLP,
-        top10PctExcludingLP: pctTop10ExclLP,
-        topHoldersExcludingLP: top10ExclLP,
-        lpHolder,
-        holdersCount: finalHoldersCount,
-      };
+    // If RPC holder count failed, fall back to “at least number of known holders”
+    let finalHoldersCount = holdersCount;
+    if (finalHoldersCount == null) {
+      finalHoldersCount = allHolders.length || null;
+    }
+
+    const holderSummary = {
+      top10Pct: pctTop10InclLP,
+      topHolders: top10InclLP,
+      top10PctExcludingLP: pctTop10ExclLP,
+      topHoldersExcludingLP: top10ExclLP,
+      lpHolder,
+      holdersCount: finalHoldersCount,
+    };
+
     // --- Insiders snapshot --------------------------------------------
 
     const INSIDER_PCT = 1; // insider ≥1%
@@ -772,7 +760,6 @@ export default async function handler(req, res) {
       insiderWalletCount: insidersAll.length,
     };
 
-    // Simple “cluster” object so the Insiders & Clusters UI always has data
     const insiderClusters = {
       riskLevel: insiderRiskLevel,
       note: insiderNote,
@@ -786,24 +773,7 @@ export default async function handler(req, res) {
         : null,
     };
 
-        // --- Origin hint ---------------------------------------------------
-
-    const rawDesc = asset?.content?.metadata?.description || "";
-    const originMeta = detectOrigin({
-      mint,
-      name,
-      symbol,
-      desc: rawDesc,
-      dexId: dexStats.dexId,
-    });
-
-    const originHint = {
-      label: originMeta.label,
-      detail: originMeta.detail,
-      key: originMeta.key,
-    };
-
-       // --- Dex metrics + age + liquidity truth --------------------------
+    // --- Dex metrics + age + liquidity truth --------------------------
 
     const tokenMetrics = {
       priceUsd: dexStats.priceUsd,
@@ -818,7 +788,7 @@ export default async function handler(req, res) {
       dexStats.ageDays >= 0
     ) {
       tokenAge = {
-        ageDays: dexStats.ageDays,   // <-- changed from "days" to "ageDays"
+        ageDays: dexStats.ageDays,
       };
     }
 
@@ -870,23 +840,55 @@ export default async function handler(req, res) {
       avgTradeUsd,
       volume24Usd: vol24,
       txCount24: tx24,
-      // lockPercent: null, // we can add this later when you compute LP lock
+      // lockPercent: null, // hook for future LP lock %
     };
 
-    // --- GlassBox risk score (v1) --------------------------------------
+    // --- Origin hint + Mayhem Mode ------------------------------------
 
-    // Safety fallback so we never crash if something above failed
+    const rawDesc = asset?.content?.metadata?.description || "";
+    const originMeta = detectOrigin({
+      mint,
+      name,
+      symbol,
+      desc: rawDesc,
+      dexId: dexStats.dexId,
+    });
+
+    // Mayhem Mode: Mayhem origin + super fresh token (< 1 hour)
+    const MAYHEM_MODE_WINDOW_DAYS = 1 / 24; // 1 hour
+    let mayhemMode = { active: false, secondsRemaining: null };
+
+    const ageDaysForMayhem = tokenAge?.ageDays ?? null;
+    if (originMeta.key === "mayhem" && ageDaysForMayhem != null) {
+      if (ageDaysForMayhem < MAYHEM_MODE_WINDOW_DAYS) {
+        const remainingDays = MAYHEM_MODE_WINDOW_DAYS - ageDaysForMayhem;
+        const secondsRemaining = Math.max(
+          0,
+          Math.round(remainingDays * 24 * 60 * 60)
+        );
+        mayhemMode = { active: true, secondsRemaining };
+      }
+    }
+
+    const originHint = {
+      label: originMeta.label,
+      detail: originMeta.detail,
+      key: originMeta.key,
+    };
+
+    // --- GlassBox risk score ------------------------------------------
+
     const liquidityTruthSafe =
       liquidityTruth ?? { level: "medium", lockPercent: null };
 
     // 1) Mint safety (0–100)
     let mintScore = 50;
     if (!mintInfo.mintAuthority && !mintInfo.freezeAuthority) {
-      mintScore = 95; // both renounced
+      mintScore = 95;
     } else if (!mintInfo.mintAuthority && mintInfo.freezeAuthority) {
-      mintScore = 75; // mint renounced, freeze still active
+      mintScore = 75;
     } else {
-      mintScore = 35; // mint still active (big red flag)
+      mintScore = 35;
     }
 
     // 2) Holder / insider safety (0–100)
@@ -895,32 +897,27 @@ export default async function handler(req, res) {
 
     let holderScore = 50;
     if (top10PctExclLP <= 25 && insidersPct <= 30) {
-      holderScore = 90; // nicely spread out
+      holderScore = 90;
     } else if (top10PctExclLP <= 40 && insidersPct <= 45) {
-      holderScore = 65; // some concentration, watch it
+      holderScore = 65;
     } else {
-      holderScore = 35; // heavy insider / whale stack
+      holderScore = 35;
     }
 
     // 3) Liquidity safety (0–100)
     let liqScore = 50;
     if (liquidityTruthSafe.level === "low") {
-      // "Mostly real"
       liqScore = 90;
     } else if (liquidityTruthSafe.level === "medium") {
-      // "Suspicious"
       liqScore = 60;
     } else if (liquidityTruthSafe.level === "high") {
-      // "Likely fake / wash"
       liqScore = 35;
     }
 
-    // If you later add 'liquidityLockPct', we can fold it in:
     const liqLockPct = liquidityTruthSafe.lockPercent ?? null;
     if (liqLockPct != null) {
-      if (liqLockPct < 50) liqScore -= 15;       // most LP unlockable
-      else if (liqLockPct < 80) liqScore -= 5;   // decent but not great
-      // >=80% stays as-is
+      if (liqLockPct < 50) liqScore -= 15;
+      else if (liqLockPct < 80) liqScore -= 5;
       if (liqScore < 0) liqScore = 0;
     }
 
@@ -929,39 +926,30 @@ export default async function handler(req, res) {
     let ageScore = 50;
     if (ageDays != null) {
       if (ageDays < 0.25) {
-        // < 6h old
-        ageScore = 30;       // very degen new
+        ageScore = 30; // < 6h
       } else if (ageDays < 2) {
-        // 6h–2d
-        ageScore = 50;       // neutral
+        ageScore = 50; // 6h–2d
       } else if (ageDays < 14) {
-        // 2–14d
-        ageScore = 70;       // getting safer
+        ageScore = 70; // 2–14d
       } else {
-        // > 14d
-        ageScore = 85;       // survived a while
+        ageScore = 85; // >14d
       }
     }
 
-    // 5) Combine into a single GlassBox score (0–100)
-    // Weights: Mint 30%, Holders 30%, Liquidity 25%, Age 15
-    const score =
-      Math.round(
-        mintScore   * 0.30 +
-        holderScore * 0.30 +
-        liqScore    * 0.25 +
-        ageScore    * 0.15
-      );
-
-    // Turn that number into a simple label
-    let scoreLevel = "medium";
-    if (score >= 80) {
-      scoreLevel = "low";      // low rug risk
-    } else if (score <= 45) {
-      scoreLevel = "high";     // high rug risk
+    // Bump down risk further if Mayhem Mode is active (super degen)
+    if (mayhemMode.active) {
+      ageScore = Math.min(ageScore, 30); // treat as ultra new
+      liqScore = Math.min(liqScore, 60); // don't over-trust liq yet
     }
 
-    // Human sentence for the UI
+    const score = Math.round(
+      mintScore * 0.3 + holderScore * 0.3 + liqScore * 0.25 + ageScore * 0.15
+    );
+
+    let scoreLevel = "medium";
+    if (score >= 80) scoreLevel = "low";
+    else if (score <= 45) scoreLevel = "high";
+
     let scoreBlurb = "";
     if (scoreLevel === "low") {
       scoreBlurb =
@@ -974,11 +962,10 @@ export default async function handler(req, res) {
         "One or more serious red flags across mint, holders, liquidity or age. Extreme rug risk.";
     }
 
-    // Final object the frontend uses
     const riskSummary = {
-      level: scoreLevel, // "low" | "medium" | "high"
+      level: scoreLevel,
       blurb: scoreBlurb,
-      score,             // 0–100 GlassBox score
+      score,
       axes: {
         mintScore,
         holderScore,
@@ -986,7 +973,6 @@ export default async function handler(req, res) {
         ageScore,
       },
     };
-
 
     // --- Stablecoin override ------------------------------------------
 
@@ -1014,6 +1000,7 @@ export default async function handler(req, res) {
       insiderSummary,
       insiderClusters,
       originHint,
+      mayhemMode,
       riskSummary,
       tokenMetrics,
       tokenAge,
