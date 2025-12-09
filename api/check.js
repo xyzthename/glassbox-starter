@@ -330,7 +330,6 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
   }
 
   // 2) Bonk ecosystem / Bonkbot style
-  // - mint or name/desc contains "bonk"
   if (
     lowerMint.endsWith("bonk") ||
     hasAny(lowerName, ["bonk"]) ||
@@ -339,7 +338,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "bonk";
     label = "Bonk ecosystem";
     detail =
-      "Token appears related to Bonk tooling or branding (e.g. Bonkbot / Bonk launches). Do not assume safety from branding alone – LP and insider distribution still drive risk.";
+      "Token appears related to Bonk tooling or branding. Do not assume safety from branding alone – LP and insider distribution still drive risk.";
     return { key, label, detail };
   }
 
@@ -365,16 +364,29 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 5) Boop
+  // 5) Believe
+  if (
+    hasAny(lowerName, ["believe"]) ||
+    hasAny(lowerSym, ["blv"]) ||
+    hasAny(lowerDesc, ["believe protocol"])
+  ) {
+    key = "believe";
+    label = "Believe";
+    detail =
+      "Branding suggests a Believe-style launch. Treat like other degen launchpads – LP and insider structure are what matter.";
+    return { key, label, detail };
+  }
+
+  // 6) Boop
   if (hasAny(lowerName, ["boop"]) || hasAny(lowerSym, ["boop"])) {
     key = "boop";
     label = "Boop";
     detail =
-      "Name / symbol suggests a Boop-style launch. Treat like any other meme launch and check insiders + LP.";
+      "Name / symbol suggests a Boop-style launch. Check for concentrated insiders and LP unlock risk.";
     return { key, label, detail };
   }
 
-  // 6) Other named launch styles (Mayhem, Moonshot, Candle, Heaven, Sugar, Moonit)
+  // 7) Other named launch styles (Mayhem, Moonshot, Candle, Heaven, Sugar, Moonit)
   if (hasAny(lowerName, ["mayhem"])) {
     key = "mayhem";
     label = "Mayhem";
@@ -423,7 +435,7 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
-  // 7) Launch platforms / studios (Jupiter Studio, LaunchLab, Wavebreak)
+  // 8) Launch platforms / studios (Jupiter Studio, LaunchLab, Wavebreak, Dynamic BC)
   if (
     hasAny(lowerDesc, ["jupiter studio"]) ||
     hasAny(lowerName, ["jupiter studio"])
@@ -447,11 +459,19 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     key = "wavebreak";
     label = "Wavebreak";
     detail =
-      "Branding suggests a Wavebreak-related token. As always, verify LP lock and insider holdings.";
+      "Branding suggests a Wavebreak-related token. Always verify LP lock and insider holdings.";
     return { key, label, detail };
   }
 
-  // 8) AMM / DEX level (Raydium, Orca, Meteora, Pump AMM)
+  if (hasAny(lowerName, ["dynamic bc"]) || hasAny(lowerDesc, ["dynamic bc"])) {
+    key = "dynamic-bc";
+    label = "Dynamic BC";
+    detail =
+      "Token metadata references Dynamic BC. Treat as an experimental AMM/launch style; LP and insiders still drive rug risk.";
+    return { key, label, detail };
+  }
+
+  // 9) AMM / DEX level (Raydium, Orca, Meteora, Pump AMM, Meteora V2)
   if (dex === "raydium") {
     key = "raydium";
     label = "Raydium AMM";
@@ -468,11 +488,12 @@ function detectOrigin({ mint, name, symbol, desc, dexId }) {
     return { key, label, detail };
   }
 
+  // Some APIs may distinguish Meteora v1/v2; for now treat both as Meteora AMM
   if (dex === "meteora") {
     key = "meteora";
     label = "Meteora AMM";
     detail =
-      "Primary liquidity pool is on Meteora. Dynamic pools can be capital-efficient but LP unlocks can still rug.";
+      "Primary liquidity pool is on Meteora AMM. Dynamic pools can be capital-efficient but LP unlocks can still rug.";
     return { key, label, detail };
   }
 
