@@ -68,24 +68,28 @@ function shortAddr(a) {
   return `${a.slice(0, 4)}…${a.slice(-4)}`;
 }
 
-// Count token accounts – but don’t crash API if it fails
+// Count holders without downloading full account data
 async function safeCountTokenHolders(mint) {
   try {
-    // Simple config: just ask for all token accounts for this mint
     const result = await callRpc("getTokenAccountsByMint", [
       mint,
-      { commitment: "confirmed" },
+      {
+        commitment: "confirmed",
+        encoding: "jsonParsed",
+        dataSlice: { offset: 0, length: 0 }, // just need the list, not balances
+      },
     ]);
 
     if (!result || !Array.isArray(result.value)) return null;
 
-    // Each entry is one token account => one holder slot
+    // One token account == one holder slot
     return result.value.length;
   } catch (e) {
     console.error("safeCountTokenHolders error:", e?.message || e);
     return null;
   }
 }
+
 
 // --- DexScreener integration ------------------------------------------
 
@@ -646,88 +650,81 @@ export default async function handler(req, res) {
 
     const tokenMeta = { mint, name, symbol, logoURI };
 
-    // --- Holder distribution ------------------------------------------
+// --- Holder distribution (LP + whales) --------------------------------
+const largestAccounts = Array.isArray(largest?.value) ? largest.value : [];
+const supplyBN = BigInt(mintParsed.supply || "0");
 
-    const largestAccounts = Array.isArray(largest?.value) ? largest.value : [];
-    const supplyBN = BigInt(mintParsed.supply || "0");
+const allHolders = largestAccounts.map((acc) => {
+  const amountStr = acc.amount || "0";
+  const amountBN = BigInt(amountStr);
 
-    const allHolders = largestAccounts.map((acc) => {
-      const amountStr = acc.amount || "0";
-      const amountBN = BigInt(amountStr);
-      const pct =
-        supplyBN > 0n
-          ? Number((amountBN * 10_000n) / supplyBN) / 100
-          : 0;
-      const uiAmount =
-        typeof acc.uiAmount === "number"
-          ? acc.uiAmount
-          : Number(acc.uiAmount ?? 0);
-      return {
-        address: acc.address,
-        pct,
-        uiAmount,
-      };
-    });
+  const pct =
+    supplyBN > 0n
+      ? Number((amountBN * 10_000n) / supplyBN) / 100 // keep two decimals
+      : 0;
 
-    // Detect LP by matching Dex pool reserve to a holder (or fallback to biggest)
-    let lpHolder = null;
-    let bestRelDiff = Infinity;
-    const poolReserve = dexStats.poolMintReserve;
+  const uiAmount =
+    typeof acc.uiAmount === "number"
+      ? acc.uiAmount
+      : Number(acc.uiAmount ?? 0);
 
-    if (
-      poolReserve != null &&
-      !Number.isNaN(poolReserve) &&
-      poolReserve > 0
-    ) {
-      for (const h of allHolders) {
-        if (!h.uiAmount || Number.isNaN(h.uiAmount)) continue;
-        const diff = Math.abs(h.uiAmount - poolReserve);
-        const rel = diff / poolReserve;
-        if (rel < 0.2 && rel < bestRelDiff) {
-          bestRelDiff = rel;
-          lpHolder = h;
-        }
-      }
+  return {
+    address: acc.address,
+    pct,
+    uiAmount,
+  };
+});
+
+// Try to match LP to the DexScreener pool size
+let lpHolder = null;
+let bestRelDiff = Infinity;
+const poolReserve = dexStats.poolMintReserve;
+
+if (poolReserve != null && !Number.isNaN(poolReserve) && poolReserve > 0) {
+  for (const h of allHolders) {
+    if (!h.uiAmount || Number.isNaN(h.uiAmount)) continue;
+    const diff = Math.abs(h.uiAmount - poolReserve);
+    const rel = diff / poolReserve;
+    if (rel < 0.2 && rel < bestRelDiff) {
+      bestRelDiff = rel;
+      lpHolder = h;
     }
+  }
+}
 
-    if (!lpHolder && allHolders.length) {
-      lpHolder = allHolders.reduce((a, b) =>
-        (a.uiAmount || 0) >= (b.uiAmount || 0) ? a : b
-      );
-    }
+// Fallback: biggest wallet = LP
+if (!lpHolder && allHolders.length) {
+  lpHolder = allHolders.reduce((a, b) =>
+    (a.uiAmount || 0) >= (b.uiAmount || 0) ? a : b
+  );
+}
 
-    allHolders.sort((a, b) => (b.pct || 0) - (a.pct || 0));
-    const top10InclLP = allHolders.slice(0, 10);
+// Sort by % of supply and take top 10
+allHolders.sort((a, b) => (b.pct || 0) - (a.pct || 0));
 
-    const nonLpHolders = lpHolder
-      ? allHolders.filter((h) => h.address !== lpHolder.address)
-      : allHolders.slice();
+const top10InclLP = allHolders.slice(0, 10);
+const nonLpHolders = lpHolder
+  ? allHolders.filter((h) => h.address !== lpHolder.address)
+  : allHolders.slice();
+const top10ExclLP = nonLpHolders.slice(0, 10);
 
-    const top10ExclLP = nonLpHolders.slice(0, 10);
+const pctTop10InclLP = top10InclLP.reduce((sum, h) => sum + (h.pct || 0), 0);
+const pctTop10ExclLP = top10ExclLP.reduce((sum, h) => sum + (h.pct || 0), 0);
 
-    const pctTop10InclLP = top10InclLP.reduce(
-      (sum, h) => sum + (h.pct || 0),
-      0
-    );
-    const pctTop10ExclLP = top10ExclLP.reduce(
-      (sum, h) => sum + (h.pct || 0),
-      0
-    );
+// Holder count: prefer full RPC count, fall back to “at least this many”
+let finalHoldersCount = holdersCount;
+if (finalHoldersCount == null) {
+  finalHoldersCount = allHolders.length || null;
+}
 
-    // If RPC holder count failed, fall back to “at least number of known holders”
-    let finalHoldersCount = holdersCount;
-    if (finalHoldersCount == null) {
-      finalHoldersCount = allHolders.length || null;
-    }
-
-    const holderSummary = {
-      top10Pct: pctTop10InclLP,
-      topHolders: top10InclLP,
-      top10PctExcludingLP: pctTop10ExclLP,
-      topHoldersExcludingLP: top10ExclLP,
-      lpHolder,
-      holdersCount: finalHoldersCount,
-    };
+const holderSummary = {
+  top10Pct: pctTop10InclLP,
+  topHolders: top10InclLP,
+  top10PctExcludingLP: pctTop10ExclLP,
+  topHoldersExcludingLP: top10ExclLP,
+  lpHolder,
+  holdersCount: finalHoldersCount,
+};
 
     // --- Insiders snapshot --------------------------------------------
 
