@@ -65,19 +65,18 @@ function shortAddr(a) {
 // Count token accounts – but don’t crash API if it fails
 async function safeCountTokenHolders(mint) {
   try {
+    // Simple config: just ask for all token accounts for this mint
     const result = await callRpc("getTokenAccountsByMint", [
       mint,
-      {
-        encoding: "jsonParsed",
-        commitment: "confirmed",
-        dataSlice: { offset: 0, length: 0 },
-      },
+      { commitment: "confirmed" },
     ]);
 
     if (!result || !Array.isArray(result.value)) return null;
-    return result.value.length; // exact holder count
+
+    // Each entry is one token account => one holder slot
+    return result.value.length;
   } catch (e) {
-    console.error("safeCountTokenHolders error:", e?.message);
+    console.error("safeCountTokenHolders error:", e?.message || e);
     return null;
   }
 }
